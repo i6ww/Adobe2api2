@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Adobe2API 控制台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/admin.css" />
+</head>
+<body>
+  <div class="bg-orb bg-orb-a"></div>
+  <div class="bg-orb bg-orb-b"></div>
+
+  <main class="shell">
+    <header class="header card" style="text-align: center; padding-bottom: 16px;">
+      <h1 style="font-size: 24px; font-weight: 800; letter-spacing: 0.05em;">Adobe2API</h1>
+      <p class="muted" style="margin-top: 4px;">Firefly 图像生成 API 中转服务</p>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-target="tokens">Token 管理</button>
+      <button class="tab-btn" data-target="config">系统配置</button>
+      <button class="tab-btn" data-target="logs">请求日志</button>
+    </div>
+
+    <!-- Tokens Tab -->
+    <div id="tokens" class="tab-pane active">
+      <section class="add-token-card card">
+        <h2>添加 Token</h2>
+        <div class="add-form">
+          <textarea id="tokenInput" placeholder="在此处粘贴抓取到的 Bearer Token (例如 eyJhbGciOiJSUz...)"></textarea>
+          <div class="actions">
+            <button id="addBtn">确认添加</button>
+            <span id="addMsg" class="msg"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="token-list-card card">
+        <div class="list-head">
+          <h2>Token 账号池</h2>
+          <button id="refreshBtn" class="secondary">刷新列表</button>
+        </div>
+        <div class="table-wrapper">
+          <table id="tokenTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Token (脱敏展示)</th>
+                <th>状态</th>
+                <th>失败次数</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="5" class="empty-state">加载中...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- Config Tab -->
+    <div id="config" class="tab-pane">
+      <section class="config-card card">
+        <h2>网络与代理设置</h2>
+        <div class="config-form">
+          <div class="form-group">
+            <label for="confApiKey">服务 API Key</label>
+            <input type="text" id="confApiKey" class="input-text" placeholder="留空表示不鉴权，例如：my-secret-key" />
+            <p class="help">用于访问本服务接口（如 /v1/images/generations）。支持 Bearer 或 X-API-Key。</p>
+          </div>
+          
+          <div class="form-group" style="margin-top: 16px;">
+            <label class="checkbox-label" style="user-select: none;">
+              <input type="checkbox" id="confUseProxy" />
+              启用 HTTP 代理
+            </label>
+            <p class="help">开启后所有请求将通过下方配置的代理服务器发送，防止 IP 被封禁。</p>
+          </div>
+          
+          <div class="form-group">
+            <label for="confProxy">代理服务器地址 (Proxy URL)</label>
+            <input type="text" id="confProxy" class="input-text" placeholder="例如：http://127.0.0.1:7890" />
+          </div>
+
+          <div class="form-group">
+            <label for="confGenerateTimeout">生成超时 (秒)</label>
+            <input type="number" id="confGenerateTimeout" class="input-text" min="30" max="600" step="1" placeholder="默认 180" />
+            <p class="help">默认 180 秒。范围 30-600，适合 2K 图片慢速场景。</p>
+          </div>
+
+          <div class="actions" style="margin-top: 24px;">
+            <button id="saveConfigBtn">保存配置</button>
+            <span id="configMsg" class="msg"></span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Logs Tab -->
+    <div id="logs" class="tab-pane">
+      <section class="card">
+        <div class="list-head">
+          <h2>请求日志</h2>
+          <div class="actions">
+            <button id="refreshLogsBtn" class="secondary">刷新</button>
+            <button id="clearLogsBtn" class="danger">清空日志</button>
+          </div>
+        </div>
+        <p class="help" style="margin-bottom: 16px;">仅展示外部 OpenAI 风格调用（chat.completions / images.generations），便于排查真实生图请求。</p>
+        <div class="table-wrapper">
+          <table id="logsTable">
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>调用</th>
+                <th>状态</th>
+                <th>耗时(秒)</th>
+                <th>模型</th>
+                <th>提示词摘要</th>
+                <th>IP</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td colspan="7" class="empty-state">暂无日志</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+  </main>
+
+  <script src="/static/admin.js"></script>
+</body>
+</html>
