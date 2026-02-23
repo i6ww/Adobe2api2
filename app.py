@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 import threading
 import time
@@ -108,7 +109,9 @@ class AdobeClient:
             self.sec_ch_ua = env_sec_ch_ua.strip() or self.sec_ch_ua
         if env_generate_timeout:
             try:
-                self.generate_timeout = max(30, min(600, int(env_generate_timeout)))
+                self.generate_timeout = int(env_generate_timeout)
+                if self.generate_timeout <= 0:
+                    self.generate_timeout = 180
             except Exception:
                 pass
 
@@ -120,8 +123,17 @@ class AdobeClient:
             timeout_val = int(timeout_val)
         except Exception:
             timeout_val = 180
-        self.generate_timeout = max(30, min(600, timeout_val))
+        self.generate_timeout = timeout_val if timeout_val > 0 else 180
         self.proxy = proxy if use_proxy and proxy else ""
+        if self.proxy:
+            logger.warning("proxy enabled for upstream requests: %s", self.proxy)
+        else:
+            logger.warning("proxy disabled for upstream requests")
+
+    def _requests_proxies(self) -> Optional[dict]:
+        if not self.proxy:
+            return None
+        return {"http": self.proxy, "https": self.proxy}
 
     def _session(self):
         if CurlSession is None:
@@ -180,19 +192,19 @@ class AdobeClient:
     def _post_json(self, url: str, headers: dict, payload: dict):
         session = self._session()
         if session is None:
-            return requests.post(url, headers=headers, json=payload, timeout=20)
+            return requests.post(url, headers=headers, json=payload, timeout=20, proxies=self._requests_proxies())
         with session:
             resp = session.post(url, headers=headers, json=payload)
         # Some environments return intermittent 451 via curl_cffi path.
         # Retry once with plain requests for better stability.
         if resp.status_code == 451:
-            return requests.post(url, headers=headers, json=payload, timeout=20)
+            return requests.post(url, headers=headers, json=payload, timeout=20, proxies=self._requests_proxies())
         return resp
 
     def _post_bytes(self, url: str, headers: dict, payload: bytes):
         session = self._session()
         if session is None:
-            return requests.post(url, headers=headers, data=payload, timeout=30)
+            return requests.post(url, headers=headers, data=payload, timeout=30, proxies=self._requests_proxies())
         with session:
             resp = session.post(url, headers=headers, data=payload)
         return resp
@@ -200,7 +212,7 @@ class AdobeClient:
     def _get(self, url: str, headers: dict, timeout: int = 20):
         session = self._session()
         if session is None:
-            return requests.get(url, headers=headers, timeout=timeout)
+            return requests.get(url, headers=headers, timeout=timeout, proxies=self._requests_proxies())
         with session:
             resp = session.get(url, headers=headers)
         return resp
@@ -451,34 +463,63 @@ class RequestLogRecord:
     path: str
     status_code: int
     duration_sec: int
-    client_ip: str
+    proxy_used: bool
     operation: str
+    preview_url: Optional[str] = None
+    preview_kind: Optional[str] = None
     model: Optional[str] = None
     prompt_preview: Optional[str] = None
     error: Optional[str] = None
 
 
 class RequestLogStore:
-    def __init__(self, max_items: int = 500) -> None:
-        self._items: list[RequestLogRecord] = []
+    def __init__(self, file_path: Path, max_items: int = 500) -> None:
+        self._file_path = file_path
         self._lock = threading.Lock()
         self._max_items = max_items
+        self._file_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self._file_path.exists():
+            self._file_path.touch()
+
+    def _truncate_to_max_locked(self) -> None:
+        with self._file_path.open("r", encoding="utf-8") as f:
+            lines = f.readlines()
+        if len(lines) <= self._max_items:
+            return
+        kept = lines[-self._max_items :]
+        with self._file_path.open("w", encoding="utf-8") as f:
+            f.writelines(kept)
 
     def add(self, item: RequestLogRecord) -> None:
+        payload = asdict(item)
         with self._lock:
-            self._items.append(item)
-            if len(self._items) > self._max_items:
-                self._items = self._items[-self._max_items :]
+            with self._file_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+            self._truncate_to_max_locked()
 
     def list(self, limit: int = 100) -> list[dict]:
         safe_limit = min(max(int(limit or 100), 1), 500)
         with self._lock:
-            data = [asdict(x) for x in reversed(self._items[-safe_limit:])]
+            with self._file_path.open("r", encoding="utf-8") as f:
+                lines = f.readlines()
+        selected = lines[-safe_limit:]
+        data: list[dict] = []
+        for line in reversed(selected):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+                if isinstance(item, dict):
+                    data.append(item)
+            except Exception:
+                continue
         return data
 
     def clear(self) -> None:
         with self._lock:
-            self._items = []
+            with self._file_path.open("w", encoding="utf-8") as f:
+                f.write("")
 
 
 # 极简配置启动
@@ -492,7 +533,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/generated", StaticFiles(directory=GENERATED_DIR), name="generated_files")
 
 store = JobStore()
-log_store = RequestLogStore()
+log_store = RequestLogStore(DATA_DIR / "request_logs.jsonl")
 client = AdobeClient()
 
 
@@ -518,12 +559,24 @@ def _extract_logging_fields(raw_body: bytes) -> dict[str, Optional[str]]:
         return {"model": None, "prompt_preview": None}
 
 
+def _set_request_preview(request: Request, url: str, kind: str = "image") -> None:
+    if not url:
+        return
+    try:
+        request.state.log_preview_url = url
+        request.state.log_preview_kind = kind
+    except Exception:
+        pass
+
+
 @app.middleware("http")
 async def request_logger(request: Request, call_next):
     started = time.time()
     method = request.method.upper()
     path = request.url.path
-    client_ip = request.client.host if request.client else "-"
+    proxy_used = False
+    preview_url = None
+    preview_kind = None
     raw_body = b""
     body_meta = {"model": None, "prompt_preview": None}
     error_text = None
@@ -555,6 +608,9 @@ async def request_logger(request: Request, call_next):
     finally:
         if should_log:
             duration_sec = int(time.time() - started)
+            proxy_used = bool(client.proxy)
+            preview_url = getattr(request.state, "log_preview_url", None)
+            preview_kind = getattr(request.state, "log_preview_kind", None)
             log_store.add(
                 RequestLogRecord(
                     id=uuid.uuid4().hex[:12],
@@ -563,8 +619,10 @@ async def request_logger(request: Request, call_next):
                     path=path,
                     status_code=status_code,
                     duration_sec=duration_sec,
-                    client_ip=client_ip,
+                    proxy_used=proxy_used,
                     operation=operation,
+                    preview_url=preview_url,
+                    preview_kind=preview_kind,
                     model=body_meta.get("model"),
                     prompt_preview=body_meta.get("prompt_preview"),
                     error=error_text,
@@ -616,12 +674,12 @@ def _ratio_from_size(size: str) -> str:
 def _extract_prompt_from_messages(messages) -> str:
     if not isinstance(messages, list):
         return ""
-    chunks = []
-    for msg in messages:
+    for msg in reversed(messages):
         if not isinstance(msg, dict):
             continue
         if msg.get("role") != "user":
             continue
+        chunks = []
         content = msg.get("content")
         if isinstance(content, str):
             if content.strip():
@@ -632,7 +690,8 @@ def _extract_prompt_from_messages(messages) -> str:
                     txt = str(part.get("text") or "").strip()
                     if txt:
                         chunks.append(txt)
-    return "\n".join(chunks).strip()
+        return "\n".join(chunks).strip()
+    return ""
 
 
 def _data_url_to_bytes(url: str) -> tuple[bytes, str]:
@@ -663,14 +722,14 @@ def _extract_image_urls_from_messages(messages, max_items: int = 6) -> list[str]
     urls: list[str] = []
     if not isinstance(messages, list):
         return urls
-    for msg in messages:
+    for msg in reversed(messages):
         if not isinstance(msg, dict):
             continue
         if msg.get("role") != "user":
             continue
         content = msg.get("content")
         if not isinstance(content, list):
-            continue
+            return urls
         for part in content:
             if not isinstance(part, dict):
                 continue
@@ -687,6 +746,7 @@ def _extract_image_urls_from_messages(messages, max_items: int = 6) -> list[str]
                 urls.append(image_url)
                 if len(urls) >= max_items:
                     return urls
+        return urls
     return urls
 
 
@@ -898,7 +958,7 @@ def update_config(req: ConfigUpdateRequest):
             timeout_val = int(incoming["generate_timeout"])
         except Exception:
             timeout_val = 180
-        update_data["generate_timeout"] = max(30, min(600, timeout_val))
+        update_data["generate_timeout"] = timeout_val if timeout_val > 0 else 180
     config_manager.update_all(update_data)
     client.apply_config(config_manager.get_all())
     return config_manager.get_all()
@@ -939,6 +999,7 @@ def openai_generate(data: dict, request: Request):
         out_path.write_bytes(image_bytes)
         
         image_url = _public_image_url(request, job_id)
+        _set_request_preview(request, image_url, kind="image")
 
         return {
             "created": int(time.time()),
@@ -1068,6 +1129,7 @@ def chat_completions(data: dict, request: Request):
         out_path = GENERATED_DIR / f"{job_id}.png"
         out_path.write_bytes(image_bytes)
         image_url = _public_image_url(request, job_id)
+        _set_request_preview(request, image_url, kind="image")
 
         response_payload = {
             "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",

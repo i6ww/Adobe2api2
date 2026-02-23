@@ -90,8 +90,8 @@
 
           <div class="form-group">
             <label for="confGenerateTimeout">生成超时 (秒)</label>
-            <input type="number" id="confGenerateTimeout" class="input-text" min="30" max="600" step="1" placeholder="默认 180" />
-            <p class="help">默认 180 秒。范围 30-600，适合 2K 图片慢速场景。</p>
+            <input type="number" id="confGenerateTimeout" class="input-text" step="1" placeholder="默认 180" />
+            <p class="help">默认 180 秒。支持任意正整数，按你的业务场景设置。</p>
           </div>
 
           <div class="actions" style="margin-top: 24px;">
@@ -112,18 +112,18 @@
             <button id="clearLogsBtn" class="danger">清空日志</button>
           </div>
         </div>
-        <p class="help" style="margin-bottom: 16px;">仅展示外部 OpenAI 风格调用（chat.completions / images.generations），便于排查真实生图请求。</p>
+        <p class="help" style="margin-bottom: 16px;">仅展示外部 OpenAI 风格请求日志，便于排查真实生图请求。</p>
         <div class="table-wrapper">
           <table id="logsTable">
             <thead>
               <tr>
                 <th>时间</th>
-                <th>调用</th>
                 <th>状态</th>
                 <th>耗时(秒)</th>
                 <th>模型</th>
                 <th>提示词摘要</th>
-                <th>IP</th>
+                <th>使用代理</th>
+                <th>预览</th>
               </tr>
             </thead>
             <tbody>
@@ -137,6 +137,16 @@
     </div>
 
   </main>
+
+  <div id="previewModal" class="preview-modal" aria-hidden="true">
+    <div class="preview-modal-dialog" role="dialog" aria-modal="true" aria-label="媒体预览">
+      <button id="previewCloseBtn" class="preview-close" type="button">关闭</button>
+      <div id="previewContent" class="preview-content"></div>
+      <div class="preview-actions">
+        <a id="previewDownloadBtn" class="preview-download" href="#" download>下载</a>
+      </div>
+    </div>
+  </div>
 
   <script src="/static/admin.js"></script>
 </body>

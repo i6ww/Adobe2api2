@@ -9,6 +9,9 @@ document.addEventListener("DOMContentLoaded", () => {
       tabPanes.forEach(p => p.classList.remove("active"));
       btn.classList.add("active");
       document.getElementById(btn.dataset.target).classList.add("active");
+      if (btn.dataset.target === "logs") {
+        loadLogs();
+      }
     });
   });
 
@@ -130,6 +133,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const logsTbody = document.querySelector("#logsTable tbody");
   const refreshLogsBtn = document.getElementById("refreshLogsBtn");
   const clearLogsBtn = document.getElementById("clearLogsBtn");
+  const previewModal = document.getElementById("previewModal");
+  const previewContent = document.getElementById("previewContent");
+  const previewCloseBtn = document.getElementById("previewCloseBtn");
+  const previewDownloadBtn = document.getElementById("previewDownloadBtn");
 
   async function loadConfig() {
     try {
@@ -158,7 +165,7 @@ document.addEventListener("DOMContentLoaded", () => {
         api_key: confApiKey.value.trim(),
         use_proxy: confUseProxy.checked,
         proxy: confProxy.value.trim(),
-        generate_timeout: Math.max(30, Math.min(600, Number(confGenerateTimeout.value || 180))),
+        generate_timeout: Math.max(1, Number(confGenerateTimeout.value || 180)),
       };
 
       const res = await fetch("/api/v1/config", {
@@ -202,18 +209,93 @@ document.addEventListener("DOMContentLoaded", () => {
       const t = Number(item.duration_sec || 0);
       const status = Number(item.status_code || 0);
       const statusClass = status >= 500 ? "log-status-5xx" : (status >= 400 ? "log-status-4xx" : "log-status-2xx");
+      const previewUrl = String(item.preview_url || "").trim();
+      const previewKind = String(item.preview_kind || "").trim();
+      const previewCell = previewUrl
+        ? `<button class="small preview-btn" data-url="${encodeURIComponent(previewUrl)}" data-kind="${previewKind || ""}">查看</button>`
+        : `<span style="color:#7f96ad;">-</span>`;
       tr.innerHTML = `
         <td style="white-space: nowrap; color: #a8bfd8;">${dt.toLocaleString()}</td>
-        <td><code>${item.operation || "-"}</code> <span style="color:#a8bfd8;">${item.path || "-"}</span></td>
         <td><span class="status-badge ${statusClass}">${status || "-"}</span></td>
-        <td style="color:${t > 30 ? "#ffb4bc" : "#a8bfd8"};">${t}</td>
+        <td style="color:#a8bfd8;">${t}</td>
         <td class="token-val">${item.model || "-"}</td>
         <td title="${(item.prompt_preview || "").replace(/"/g, "&quot;")}" style="max-width: 280px; color: #a8bfd8;">${item.prompt_preview || "-"}</td>
-        <td style="font-family: 'IBM Plex Mono', monospace; color:#a8bfd8;">${item.client_ip || "-"}</td>
+        <td style="font-family: 'IBM Plex Mono', monospace; color:#a8bfd8;">${typeof item.proxy_used === "boolean" ? (item.proxy_used ? "是" : "否") : "-"}</td>
+        <td>${previewCell}</td>
       `;
       logsTbody.appendChild(tr);
     });
   }
+
+  function inferPreviewKind(url) {
+    const lowered = String(url || "").toLowerCase();
+    if (/(\.mp4|\.webm|\.ogg)(\?|$)/.test(lowered)) return "video";
+    return "image";
+  }
+
+  function closePreview() {
+    if (!previewModal || !previewContent) return;
+    previewModal.classList.remove("open");
+    previewModal.setAttribute("aria-hidden", "true");
+    previewContent.innerHTML = "";
+    if (previewDownloadBtn) {
+      previewDownloadBtn.setAttribute("href", "#");
+      previewDownloadBtn.setAttribute("download", "");
+    }
+  }
+
+  function buildDownloadFilename(url, kind) {
+    try {
+      const u = new URL(url, window.location.origin);
+      const fromPath = (u.pathname.split("/").pop() || "").trim();
+      if (fromPath) return fromPath;
+    } catch (err) {
+      // ignore parse errors and fallback
+    }
+    const ext = kind === "video" ? "mp4" : "png";
+    return `asset-${Date.now()}.${ext}`;
+  }
+
+  function openPreview(url, kind) {
+    if (!previewModal || !previewContent || !url) return;
+    const mediaKind = kind || inferPreviewKind(url);
+    if (mediaKind === "video") {
+      previewContent.innerHTML = `<video controls autoplay playsinline src="${url}"></video>`;
+    } else {
+      previewContent.innerHTML = `<img src="${url}" alt="预览图" />`;
+    }
+    if (previewDownloadBtn) {
+      previewDownloadBtn.setAttribute("href", url);
+      previewDownloadBtn.setAttribute("download", buildDownloadFilename(url, mediaKind));
+    }
+    previewModal.classList.add("open");
+    previewModal.setAttribute("aria-hidden", "false");
+  }
+
+  if (logsTbody) {
+    logsTbody.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement) || !target.classList.contains("preview-btn")) return;
+      const encodedUrl = target.getAttribute("data-url") || "";
+      const kind = (target.getAttribute("data-kind") || "").trim();
+      if (!encodedUrl) return;
+      openPreview(decodeURIComponent(encodedUrl), kind);
+    });
+  }
+
+  if (previewCloseBtn) {
+    previewCloseBtn.addEventListener("click", closePreview);
+  }
+
+  if (previewModal) {
+    previewModal.addEventListener("click", (event) => {
+      if (event.target === previewModal) closePreview();
+    });
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closePreview();
+  });
 
   if (refreshLogsBtn) {
     refreshLogsBtn.addEventListener("click", loadLogs);

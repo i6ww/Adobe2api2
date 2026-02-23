@@ -319,3 +319,75 @@ td {
   padding: 40px !important;
   color: var(--muted);
 }
+
+.preview-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 10, 16, 0.86);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.preview-modal.open {
+  display: flex;
+}
+
+.preview-modal-dialog {
+  width: min(1100px, 100%);
+  max-height: calc(100vh - 40px);
+  background: #0d1926;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preview-close {
+  align-self: flex-end;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.preview-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  max-height: calc(100vh - 130px);
+}
+
+.preview-content img,
+.preview-content video {
+  max-width: 100%;
+  max-height: calc(100vh - 150px);
+  border-radius: 8px;
+  background: #08111c;
+}
+
+.preview-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.preview-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.preview-download:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
