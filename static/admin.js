@@ -146,7 +146,7 @@ document.addEventListener("DOMContentLoaded", () => {
         confApiKey.value = data.api_key || "";
         confUseProxy.checked = data.use_proxy || false;
         confProxy.value = data.proxy || "";
-        confGenerateTimeout.value = Number(data.generate_timeout || 180);
+        confGenerateTimeout.value = Number(data.generate_timeout || 300);
       }
     } catch (err) {
       console.error("加载配置失败", err);
@@ -165,7 +165,7 @@ document.addEventListener("DOMContentLoaded", () => {
         api_key: confApiKey.value.trim(),
         use_proxy: confUseProxy.checked,
         proxy: confProxy.value.trim(),
-        generate_timeout: Math.max(1, Number(confGenerateTimeout.value || 180)),
+        generate_timeout: Math.max(1, Number(confGenerateTimeout.value || 300)),
       };
 
       const res = await fetch("/api/v1/config", {

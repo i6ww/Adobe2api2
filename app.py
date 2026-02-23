@@ -6,10 +6,11 @@ import time
 import uuid
 import base64
 import binascii
+import io
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Optional, List, Any
-from urllib.parse import unquote_to_bytes
+from urllib.parse import unquote_to_bytes, urlparse
 
 import requests
 from fastapi import FastAPI, HTTPException, Request
@@ -22,6 +23,11 @@ try:
     from curl_cffi.requests import Session as CurlSession
 except Exception:
     CurlSession = None
+
+try:
+    from PIL import Image
+except Exception:
+    Image = None
 
 from core.token_mgr import token_manager
 from core.config_mgr import config_manager
@@ -59,6 +65,14 @@ for _res in ("1k", "2k"):
             "description": f"Firefly Nano Banana Pro ({_res.upper()} {_ratio})",
         }
 DEFAULT_MODEL_ID = "firefly-nano-banana-pro-2k-16x9"
+VIDEO_MODEL_CATALOG = {
+    "firefly-sora2-4s-9x16": {"duration": 4, "aspect_ratio": "9:16", "description": "Firefly Sora2 video model (4s 9:16)"},
+    "firefly-sora2-4s-16x9": {"duration": 4, "aspect_ratio": "16:9", "description": "Firefly Sora2 video model (4s 16:9)"},
+    "firefly-sora2-8s-9x16": {"duration": 8, "aspect_ratio": "9:16", "description": "Firefly Sora2 video model (8s 9:16)"},
+    "firefly-sora2-8s-16x9": {"duration": 8, "aspect_ratio": "16:9", "description": "Firefly Sora2 video model (8s 16:9)"},
+    "firefly-sora2-12s-9x16": {"duration": 12, "aspect_ratio": "9:16", "description": "Firefly Sora2 video model (12s 9:16)"},
+    "firefly-sora2-12s-16x9": {"duration": 12, "aspect_ratio": "16:9", "description": "Firefly Sora2 video model (12s 16:9)"},
+}
 
 
 class AdobeRequestError(Exception):
@@ -77,13 +91,14 @@ class UpstreamTemporaryError(AdobeRequestError):
 
 class AdobeClient:
     submit_url = "https://firefly-3p.ff.adobe.io/v2/3p-images/generate-async"
+    video_submit_url = "https://firefly-3p.ff.adobe.io/v2/3p-videos/generate-async"
     upload_url = "https://firefly-3p.ff.adobe.io/v2/storage/image"
 
     def __init__(self) -> None:
         self.api_key = "clio-playground-web"
         self.impersonate = "chrome124"
         self.proxy = ""
-        self.generate_timeout = 180
+        self.generate_timeout = 300
         self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
         self.sec_ch_ua = '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"'
 
@@ -111,19 +126,19 @@ class AdobeClient:
             try:
                 self.generate_timeout = int(env_generate_timeout)
                 if self.generate_timeout <= 0:
-                    self.generate_timeout = 180
+                    self.generate_timeout = 300
             except Exception:
                 pass
 
     def apply_config(self, cfg: dict) -> None:
         proxy = str(cfg.get("proxy", "")).strip()
         use_proxy = bool(cfg.get("use_proxy", False))
-        timeout_val = cfg.get("generate_timeout", 180)
+        timeout_val = cfg.get("generate_timeout", 300)
         try:
             timeout_val = int(timeout_val)
         except Exception:
-            timeout_val = 180
-        self.generate_timeout = timeout_val if timeout_val > 0 else 180
+            timeout_val = 300
+        self.generate_timeout = timeout_val if timeout_val > 0 else 300
         self.proxy = proxy if use_proxy and proxy else ""
         if self.proxy:
             logger.warning("proxy enabled for upstream requests: %s", self.proxy)
@@ -312,6 +327,158 @@ class AdobeClient:
         candidates.append(c5)
 
         return candidates
+
+    @staticmethod
+    def _video_size(aspect_ratio: str) -> dict:
+        if aspect_ratio == "16:9":
+            return {"width": 1280, "height": 720}
+        return {"width": 720, "height": 1280}
+
+    @staticmethod
+    def _normalize_video_poll_url(raw_url: str) -> str:
+        if not raw_url:
+            return raw_url
+        try:
+            parsed = urlparse(raw_url)
+            host = parsed.netloc
+            path_parts = [p for p in parsed.path.split("/") if p]
+            if not host or not path_parts:
+                return raw_url
+            if not host.startswith("firefly-epo"):
+                return raw_url
+            job_id = path_parts[-1]
+            if not job_id:
+                return raw_url
+            return f"https://bks-epo8522.adobe.io/v2/jobs/result/{job_id}?host={host}/"
+        except Exception:
+            return raw_url
+
+    @staticmethod
+    def _build_video_prompt_json(prompt: str, duration: int, negative_prompt: str = "") -> str:
+        payload = {
+            "id": 1,
+            "duration_sec": int(duration),
+            "prompt_text": prompt,
+        }
+        if negative_prompt:
+            payload["negative_prompt"] = negative_prompt
+        return json.dumps(payload, ensure_ascii=False)
+
+    def _build_video_payload(
+        self,
+        prompt: str,
+        aspect_ratio: str,
+        duration: int,
+        source_image_ids: Optional[list[str]] = None,
+        negative_prompt: str = "",
+        generate_audio: bool = True,
+    ) -> dict:
+        seed_val = int(time.time()) % 999999
+        payload = {
+            "n": 1,
+            "seeds": [seed_val],
+            "modelId": "sora",
+            "modelVersion": "sora-2",
+            "size": self._video_size(aspect_ratio),
+            "duration": int(duration),
+            "fps": 24,
+            "prompt": self._build_video_prompt_json(prompt=prompt, duration=duration, negative_prompt=negative_prompt),
+            "generationMetadata": {"module": "text2video"},
+            "model": "openai:firefly:colligo:sora2",
+            "generateAudio": bool(generate_audio),
+            "generateLoop": False,
+            "transparentBackground": False,
+            "seed": str(seed_val),
+            "locale": "en-US",
+            "camera": {
+                "angle": "none",
+                "shotSize": "none",
+                "motion": None,
+                "promptStyle": None,
+            },
+            "negativePrompt": negative_prompt or "",
+            "jobMode": "standard",
+            "debugGenerationEndpoint": "",
+            "referenceBlobs": [],
+            "referenceFrames": [],
+            "referenceImages": [],
+            "referenceVideo": None,
+            "cameraMotionReferenceVideo": None,
+            "characterReference": None,
+            "editReferenceVideo": None,
+            "output": {"storeInputs": True},
+        }
+        if source_image_ids:
+            first_id = str(source_image_ids[0])
+            payload["referenceBlobs"] = [{"id": first_id, "usage": "general", "promptReference": 1}]
+            payload["referenceFrames"] = [{"localBlobRef": first_id}, None]
+        return payload
+
+    def generate_video(
+        self,
+        token: str,
+        prompt: str,
+        aspect_ratio: str = "9:16",
+        duration: int = 12,
+        source_image_ids: Optional[list[str]] = None,
+        timeout: int = 600,
+        negative_prompt: str = "",
+        generate_audio: bool = True,
+    ) -> tuple[bytes, dict]:
+        payload = self._build_video_payload(
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+            duration=duration,
+            source_image_ids=source_image_ids,
+            negative_prompt=negative_prompt,
+            generate_audio=generate_audio,
+        )
+        submit_resp = self._post_json(self.video_submit_url, headers=self._submit_headers(token), payload=payload)
+
+        if submit_resp.status_code in (401, 403):
+            access_error = submit_resp.headers.get("x-access-error")
+            if access_error == "taste_exhausted":
+                raise QuotaExhaustedError("Adobe quota exhausted for this account")
+            raise AuthError("Token invalid or expired")
+
+        if submit_resp.status_code != 200:
+            if submit_resp.status_code in (429, 451) or submit_resp.status_code >= 500:
+                raise UpstreamTemporaryError(f"video submit failed: {submit_resp.status_code} {submit_resp.text[:300]}")
+            raise AdobeRequestError(f"video submit failed: {submit_resp.status_code} {submit_resp.text[:300]}")
+
+        submit_data = submit_resp.json()
+        poll_url = submit_resp.headers.get("x-override-status-link") or ((submit_data.get("links") or {}).get("result") or {}).get("href")
+        if not poll_url:
+            raise AdobeRequestError("video submit succeeded but no poll url returned")
+        poll_url = self._normalize_video_poll_url(str(poll_url))
+
+        start = time.time()
+        while True:
+            poll_resp = self._get(poll_url, headers=self._poll_headers(token), timeout=20)
+            if poll_resp.status_code in (401, 403):
+                raise AuthError("Token invalid or expired")
+            if poll_resp.status_code != 200:
+                if poll_resp.status_code in (429, 451) or poll_resp.status_code >= 500:
+                    raise UpstreamTemporaryError(f"video poll failed: {poll_resp.status_code} {poll_resp.text[:300]}")
+                raise AdobeRequestError(f"video poll failed: {poll_resp.status_code} {poll_resp.text[:300]}")
+
+            latest = poll_resp.json()
+            outputs = latest.get("outputs") or []
+            if outputs:
+                video_url = (((outputs[0] or {}).get("video") or {}).get("presignedUrl"))
+                if not video_url:
+                    raise AdobeRequestError("video job finished without video url")
+                video_resp = self._get(video_url, headers={"accept": "*/*"}, timeout=60)
+                video_resp.raise_for_status()
+                return video_resp.content, latest
+
+            status_val = str(latest.get("status") or "").upper()
+            if status_val in {"FAILED", "CANCELLED", "ERROR"}:
+                raise AdobeRequestError(f"video job failed: {latest}")
+
+            if time.time() - start > timeout:
+                raise AdobeRequestError("video generation timed out")
+            time.sleep(3.0)
 
     def generate(
         self,
@@ -671,6 +838,12 @@ def _ratio_from_size(size: str) -> str:
     return mapping.get(str(size or "").strip(), "1:1")
 
 
+def _resolve_video_options(data: dict) -> tuple[bool, str]:
+    generate_audio = bool(data.get("generate_audio", data.get("generateAudio", True)))
+    negative_prompt = str(data.get("negative_prompt") or data.get("negativePrompt") or "").strip()
+    return generate_audio, negative_prompt
+
+
 def _extract_prompt_from_messages(messages) -> str:
     if not isinstance(messages, list):
         return ""
@@ -791,6 +964,40 @@ def _load_input_images(messages) -> list[tuple[bytes, str]]:
     return loaded
 
 
+def _prepare_video_source_image(image_bytes: bytes, aspect_ratio: str) -> tuple[bytes, str]:
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="image_url is empty")
+    if Image is None:
+        return image_bytes, "image/jpeg"
+
+    target_size = (1280, 720) if aspect_ratio == "16:9" else (720, 1280)
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as src:
+            src = src.convert("RGB")
+            src_ratio = src.width / max(1, src.height)
+            tgt_ratio = target_size[0] / target_size[1]
+
+            if src_ratio > tgt_ratio:
+                new_h = target_size[1]
+                new_w = int(new_h * src_ratio)
+            else:
+                new_w = target_size[0]
+                new_h = int(new_w / max(src_ratio, 1e-6))
+
+            resized = src.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            left = max(0, (new_w - target_size[0]) // 2)
+            top = max(0, (new_h - target_size[1]) // 2)
+            cropped = resized.crop((left, top, left + target_size[0], top + target_size[1]))
+
+            out = io.BytesIO()
+            cropped.save(out, format="PNG")
+            return out.getvalue(), "image/png"
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"invalid image for video: {exc}")
+
+
 def _resolve_ratio_and_resolution(data: dict, model_id: Optional[str]) -> tuple[str, str, str]:
     ratio = str(data.get("aspect_ratio") or "").strip() or _ratio_from_size(data.get("size", "1024x1024"))
     if ratio not in SUPPORTED_RATIOS:
@@ -831,6 +1038,19 @@ def _require_service_api_key(request: Request) -> None:
 
 def _public_image_url(request: Request, job_id: str) -> str:
     return str(request.url_for("generated_files", path=f"{job_id}.png"))
+
+
+def _public_generated_url(request: Request, filename: str) -> str:
+    return str(request.url_for("generated_files", path=filename))
+
+
+def _video_ext_from_meta(meta: dict) -> str:
+    content_type = str(meta.get("contentType") or "").lower()
+    if "webm" in content_type:
+        return "webm"
+    if "ogg" in content_type or "ogv" in content_type:
+        return "ogv"
+    return "mp4"
 
 
 def _sse_chat_stream(payload: dict):
@@ -901,6 +1121,15 @@ def list_models(request: Request):
                 "description": conf["description"],
             }
         )
+    for model_id, conf in VIDEO_MODEL_CATALOG.items():
+        data.append(
+            {
+                "id": model_id,
+                "object": "model",
+                "owned_by": "adobe2api",
+                "description": conf["description"],
+            }
+        )
     return {"object": "list", "data": data}
 
 
@@ -957,8 +1186,8 @@ def update_config(req: ConfigUpdateRequest):
         try:
             timeout_val = int(incoming["generate_timeout"])
         except Exception:
-            timeout_val = 180
-        update_data["generate_timeout"] = timeout_val if timeout_val > 0 else 180
+            timeout_val = 300
+        update_data["generate_timeout"] = timeout_val if timeout_val > 0 else 300
     config_manager.update_all(update_data)
     client.apply_config(config_manager.get_all())
     return config_manager.get_all()
@@ -978,6 +1207,8 @@ def openai_generate(data: dict, request: Request):
         return JSONResponse(status_code=400, content={"error": {"message": "prompt is required", "type": "invalid_request_error"}})
 
     model_id = data.get("model")
+    if str(model_id or "").strip() in VIDEO_MODEL_CATALOG:
+        return JSONResponse(status_code=400, content={"error": {"message": "Use /v1/chat/completions for video generation", "type": "invalid_request_error"}})
     ratio, output_resolution, resolved_model_id = _resolve_ratio_and_resolution(data, model_id)
 
     token = token_manager.get_available()
@@ -1104,8 +1335,31 @@ def chat_completions(data: dict, request: Request):
             content={"error": {"message": "messages or prompt is required", "type": "invalid_request_error"}},
         )
 
-    model_id = data.get("model")
-    ratio, output_resolution, resolved_model_id = _resolve_ratio_and_resolution(data, model_id)
+    model_id = str(data.get("model") or "").strip()
+    if model_id.startswith("firefly-sora2") and model_id not in VIDEO_MODEL_CATALOG:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "message": "Invalid video model. Use /v1/models to get supported firefly-sora2-* models",
+                    "type": "invalid_request_error",
+                }
+            },
+        )
+    video_conf = VIDEO_MODEL_CATALOG.get(model_id)
+    is_video_model = video_conf is not None
+    resolved_model_id = model_id if is_video_model else None
+    ratio = "9:16"
+    output_resolution = "2K"
+    duration = int(video_conf["duration"]) if video_conf else 12
+    if video_conf:
+        ratio = str(video_conf.get("aspect_ratio") or ratio)
+    generate_audio = True
+    negative_prompt = ""
+    if is_video_model:
+        generate_audio, negative_prompt = _resolve_video_options(data)
+    else:
+        ratio, output_resolution, resolved_model_id = _resolve_ratio_and_resolution(data, model_id or None)
 
     token = token_manager.get_available()
     if not token:
@@ -1114,22 +1368,49 @@ def chat_completions(data: dict, request: Request):
     try:
         input_images = _load_input_images(data.get("messages") or [])
         source_image_ids: list[str] = []
-        for image_bytes, image_mime in input_images:
-            source_image_ids.append(client.upload_image(token, image_bytes, image_mime or "image/jpeg"))
+        image_url = ""
+        response_label = "generated image"
 
-        image_bytes, _meta = client.generate(
-            token=token,
-            prompt=prompt,
-            aspect_ratio=ratio,
-            output_resolution=output_resolution,
-            source_image_ids=source_image_ids,
-            timeout=client.generate_timeout,
-        )
-        job_id = uuid.uuid4().hex
-        out_path = GENERATED_DIR / f"{job_id}.png"
-        out_path.write_bytes(image_bytes)
-        image_url = _public_image_url(request, job_id)
-        _set_request_preview(request, image_url, kind="image")
+        if is_video_model:
+            if input_images:
+                prepared_bytes, prepared_mime = _prepare_video_source_image(input_images[0][0], ratio)
+                source_image_ids.append(client.upload_image(token, prepared_bytes, prepared_mime))
+
+            video_bytes, video_meta = client.generate_video(
+                token=token,
+                prompt=prompt,
+                aspect_ratio=ratio,
+                duration=duration,
+                source_image_ids=source_image_ids,
+                timeout=max(int(client.generate_timeout), 600),
+                negative_prompt=negative_prompt,
+                generate_audio=generate_audio,
+            )
+            job_id = uuid.uuid4().hex
+            video_ext = _video_ext_from_meta(video_meta)
+            filename = f"{job_id}.{video_ext}"
+            out_path = GENERATED_DIR / filename
+            out_path.write_bytes(video_bytes)
+            image_url = _public_generated_url(request, filename)
+            _set_request_preview(request, image_url, kind="video")
+            response_label = "generated video"
+        else:
+            for image_bytes, image_mime in input_images:
+                source_image_ids.append(client.upload_image(token, image_bytes, image_mime or "image/jpeg"))
+
+            image_bytes, _meta = client.generate(
+                token=token,
+                prompt=prompt,
+                aspect_ratio=ratio,
+                output_resolution=output_resolution,
+                source_image_ids=source_image_ids,
+                timeout=client.generate_timeout,
+            )
+            job_id = uuid.uuid4().hex
+            out_path = GENERATED_DIR / f"{job_id}.png"
+            out_path.write_bytes(image_bytes)
+            image_url = _public_image_url(request, job_id)
+            _set_request_preview(request, image_url, kind="image")
 
         response_payload = {
             "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
@@ -1141,7 +1422,7 @@ def chat_completions(data: dict, request: Request):
                     "index": 0,
                     "message": {
                         "role": "assistant",
-                        "content": f"![generated image]({image_url})\n\n{image_url}",
+                        "content": f"![{response_label}]({image_url})\n\n{image_url}",
                     },
                     "finish_reason": "stop",
                 }
