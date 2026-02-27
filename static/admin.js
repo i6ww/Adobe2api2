@@ -1,4 +1,31 @@
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  const rawFetch = window.fetch.bind(window);
+  window.fetch = async (...args) => {
+    const res = await rawFetch(...args);
+    if (res.status === 401) {
+      window.location.href = "/login";
+    }
+    return res;
+  };
+
+  async function ensureAuthenticated() {
+    try {
+      const res = await rawFetch("/api/v1/auth/me", { method: "GET" });
+      if (!res.ok) {
+        window.location.href = "/login";
+        return false;
+      }
+      return true;
+    } catch (err) {
+      window.location.href = "/login";
+      return false;
+    }
+  }
+
+  if (!(await ensureAuthenticated())) {
+    return;
+  }
+
   // Tabs
   const tabBtns = document.querySelectorAll(".tab-btn");
   const tabPanes = document.querySelectorAll(".tab-pane");
@@ -549,6 +576,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Config Management
   const confApiKey = document.getElementById("confApiKey");
+  const confAdminUsername = document.getElementById("confAdminUsername");
+  const confAdminPassword = document.getElementById("confAdminPassword");
   const confPublicBaseUrl = document.getElementById("confPublicBaseUrl");
   const confUseProxy = document.getElementById("confUseProxy");
   const confProxy = document.getElementById("confProxy");
@@ -630,6 +659,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (res.ok) {
         const data = await res.json();
         confApiKey.value = data.api_key || "";
+        confAdminUsername.value = data.admin_username || "admin";
+        confAdminPassword.value = data.admin_password || "admin";
         confPublicBaseUrl.value = data.public_base_url || "";
         confUseProxy.checked = data.use_proxy || false;
         confProxy.value = data.proxy || "";
@@ -661,6 +692,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const payload = {
         ...currentData,
         api_key: confApiKey.value.trim(),
+        admin_username: confAdminUsername.value.trim() || "admin",
+        admin_password: confAdminPassword.value || "admin",
         public_base_url: confPublicBaseUrl.value.trim(),
         use_proxy: confUseProxy.checked,
         proxy: confProxy.value.trim(),
@@ -679,6 +712,13 @@ document.addEventListener("DOMContentLoaded", () => {
         token_rotation_strategy: String(confTokenRotationStrategy.value || "round_robin").trim() || "round_robin",
         refresh_interval_hours: Number(confRefreshIntervalHours.value || 15),
       };
+
+      if (!payload.admin_username) {
+        throw new Error("管理员账号不能为空");
+      }
+      if (!payload.admin_password) {
+        throw new Error("管理员密码不能为空");
+      }
 
       if (!Number.isInteger(payload.refresh_interval_hours) || payload.refresh_interval_hours < 1 || payload.refresh_interval_hours > 24) {
         throw new Error("自动刷新间隔必须是 1-24 的整数小时");

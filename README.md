@@ -26,6 +26,8 @@ uvicorn app:app --host 0.0.0.0 --port 6001 --reload
 Open admin UI:
 
 - `http://127.0.0.1:6001/`
+- Default admin login: `admin / admin`
+- You can change credentials in `系统配置` after login, or via `config/config.json` (`admin_username`, `admin_password`)
 
 ### Docker deployment
 
@@ -60,6 +62,8 @@ Service API key is configured in `config/config.json` (`api_key`).
 - If set, call with either:
   - `Authorization: Bearer <api_key>`
   - `X-API-Key: <api_key>`
+
+Admin UI and admin APIs require login session cookie via `/api/v1/auth/login`.
 
 ## 3) External API usage
 

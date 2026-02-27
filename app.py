@@ -18,6 +18,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 try:
@@ -1397,6 +1399,18 @@ app = FastAPI(
     docs_url=None,  # 关闭 swagger，节省资源
     redoc_url=None,
 )
+session_secret = str(
+    os.getenv("ADOBE_ADMIN_SESSION_SECRET")
+    or config_manager.get("admin_session_secret")
+    or "adobe2api-dev-session-secret"
+).strip()
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=session_secret,
+    session_cookie="adobe2api_session",
+    same_site="lax",
+    https_only=False,
+)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/generated", StaticFiles(directory=GENERATED_DIR), name="generated_files")
 
@@ -1763,6 +1777,8 @@ class TokenCreditsBatchRefreshRequest(BaseModel):
 
 class ConfigUpdateRequest(BaseModel):
     api_key: Optional[str] = None
+    admin_username: Optional[str] = None
+    admin_password: Optional[str] = None
     public_base_url: Optional[str] = None
     proxy: Optional[str] = None
     use_proxy: Optional[bool] = None
@@ -1806,6 +1822,11 @@ class RefreshCookieBatchImportRequest(BaseModel):
 
 class RefreshProfileEnabledRequest(BaseModel):
     enabled: bool
+
+
+class AdminLoginRequest(BaseModel):
+    username: str
+    password: str
 
 
 def _resolve_video_options(data: dict) -> tuple[bool, str]:
@@ -2131,6 +2152,22 @@ def _require_service_api_key(request: Request) -> None:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
 
+def _is_admin_authenticated(request: Request) -> bool:
+    sess = request.session or {}
+    if not bool(sess.get("admin_auth")):
+        return False
+    username = str(sess.get("username") or "").strip()
+    required_username = str(
+        config_manager.get("admin_username", "admin") or "admin"
+    ).strip()
+    return bool(username) and username == required_username
+
+
+def _require_admin_auth(request: Request) -> None:
+    if not _is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 def _public_image_url(request: Request, job_id: str) -> str:
     return _public_generated_url(request, f"{job_id}.png")
 
@@ -2217,8 +2254,51 @@ def health():
     return {"status": "ok", "pool_size": len(token_manager.list_all())}
 
 
+@app.get("/login", include_in_schema=False)
+def page_login(request: Request):
+    if _is_admin_authenticated(request):
+        return RedirectResponse(url="/")
+    return FileResponse(STATIC_DIR / "login.html")
+
+
+@app.post("/api/v1/auth/login")
+def admin_login(req: AdminLoginRequest, request: Request):
+    username = str(req.username or "").strip()
+    password = str(req.password or "")
+    expected_username = str(
+        config_manager.get("admin_username", "admin") or "admin"
+    ).strip()
+    expected_password = str(config_manager.get("admin_password", "admin") or "admin")
+
+    if username != expected_username or password != expected_password:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    request.session.clear()
+    request.session["admin_auth"] = True
+    request.session["username"] = username
+    request.session["login_at"] = int(time.time())
+    return {"status": "ok", "username": username}
+
+
+@app.get("/api/v1/auth/me")
+def admin_me(request: Request):
+    if not _is_admin_authenticated(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return {
+        "authenticated": True,
+        "username": str((request.session or {}).get("username") or ""),
+    }
+
+
+@app.post("/api/v1/auth/logout")
+def admin_logout(request: Request):
+    request.session.clear()
+    return {"status": "ok"}
+
+
 @app.get("/api/v1/logs")
-def list_logs(limit: int = 20, page: int = 1):
+def list_logs(request: Request, limit: int = 20, page: int = 1):
+    _require_admin_auth(request)
     logs, total = log_store.list(limit=limit, page=page)
     safe_limit = min(max(int(limit or 20), 1), 100)
     safe_page = max(int(page or 1), 1)
@@ -2235,7 +2315,8 @@ def list_logs(limit: int = 20, page: int = 1):
 
 
 @app.get("/api/v1/logs/running")
-def list_running_logs(limit: int = 200):
+def list_running_logs(request: Request, limit: int = 200):
+    _require_admin_auth(request)
     rows = live_log_store.list(limit=limit)
     items = []
     for item in rows:
@@ -2266,7 +2347,8 @@ def _resolve_logs_stats_range(range_key: str) -> tuple[str, float, float]:
 
 
 @app.get("/api/v1/logs/stats")
-def logs_stats(range: str = "today"):
+def logs_stats(request: Request, range: str = "today"):
+    _require_admin_auth(request)
     range_key, start_ts, end_ts = _resolve_logs_stats_range(range)
     payload = log_store.stats(start_ts=start_ts, end_ts=end_ts)
     payload["in_progress_requests"] = live_log_store.count_in_progress()
@@ -2275,7 +2357,8 @@ def logs_stats(range: str = "today"):
 
 
 @app.delete("/api/v1/logs")
-def clear_logs():
+def clear_logs(request: Request):
+    _require_admin_auth(request)
     log_store.clear()
     return {"status": "ok"}
 
@@ -2306,7 +2389,9 @@ def list_models(request: Request):
 
 
 @app.get("/", include_in_schema=False)
-def page_root():
+def page_root(request: Request):
+    if not _is_admin_authenticated(request):
+        return RedirectResponse(url="/login")
     return FileResponse(STATIC_DIR / "admin.html")
 
 
@@ -2314,7 +2399,8 @@ def page_root():
 
 
 @app.get("/api/v1/tokens")
-def list_tokens():
+def list_tokens(request: Request):
+    _require_admin_auth(request)
     tokens = token_manager.list_all()
     for item in tokens:
         if not bool(item.get("auto_refresh")):
@@ -2326,7 +2412,8 @@ def list_tokens():
 
 
 @app.post("/api/v1/tokens")
-def add_token(req: TokenAddRequest):
+def add_token(req: TokenAddRequest, request: Request):
+    _require_admin_auth(request)
     if not req.token.strip():
         raise HTTPException(status_code=400, detail="Empty token")
     token_manager.add(req.token)
@@ -2334,7 +2421,8 @@ def add_token(req: TokenAddRequest):
 
 
 @app.post("/api/v1/tokens/batch")
-def add_tokens_batch(req: TokenBatchAddRequest):
+def add_tokens_batch(req: TokenBatchAddRequest, request: Request):
+    _require_admin_auth(request)
     if not req.tokens:
         raise HTTPException(status_code=400, detail="tokens is required")
 
@@ -2353,7 +2441,8 @@ def add_tokens_batch(req: TokenBatchAddRequest):
 
 
 @app.post("/api/v1/tokens/export")
-def export_tokens(req: ExportSelectionRequest):
+def export_tokens(req: ExportSelectionRequest, request: Request):
+    _require_admin_auth(request)
     token_ids = req.ids if isinstance(req.ids, list) else None
     exported = token_manager.export_tokens(token_ids)
     return {
@@ -2365,13 +2454,15 @@ def export_tokens(req: ExportSelectionRequest):
 
 
 @app.delete("/api/v1/tokens/{tid}")
-def delete_token(tid: str):
+def delete_token(tid: str, request: Request):
+    _require_admin_auth(request)
     token_manager.remove(tid)
     return {"status": "ok"}
 
 
 @app.put("/api/v1/tokens/{tid}/status")
-def set_token_status(tid: str, status: str):
+def set_token_status(tid: str, status: str, request: Request):
+    _require_admin_auth(request)
     if status not in ("active", "disabled"):
         raise HTTPException(status_code=400, detail="Invalid status")
     token_info = token_manager.get_by_id(tid)
@@ -2387,7 +2478,8 @@ def set_token_status(tid: str, status: str):
 
 
 @app.post("/api/v1/tokens/{tid}/refresh")
-def refresh_token_now(tid: str):
+def refresh_token_now(tid: str, request: Request):
+    _require_admin_auth(request)
     token_info = token_manager.get_by_id(tid)
     if not token_info:
         raise HTTPException(status_code=404, detail="token not found")
@@ -2411,7 +2503,8 @@ def refresh_token_now(tid: str):
 
 
 @app.put("/api/v1/tokens/{tid}/auto-refresh")
-def set_token_auto_refresh_enabled(tid: str, enabled: bool):
+def set_token_auto_refresh_enabled(tid: str, enabled: bool, request: Request):
+    _require_admin_auth(request)
     token_info = token_manager.get_by_id(tid)
     if not token_info:
         raise HTTPException(status_code=404, detail="token not found")
@@ -2430,7 +2523,8 @@ def set_token_auto_refresh_enabled(tid: str, enabled: bool):
 
 
 @app.post("/api/v1/tokens/{tid}/credits/refresh")
-def refresh_token_credits(tid: str):
+def refresh_token_credits(tid: str, request: Request):
+    _require_admin_auth(request)
     token_info = token_manager.get_by_id(tid)
     if not token_info:
         raise HTTPException(status_code=404, detail="token not found")
@@ -2445,7 +2539,10 @@ def refresh_token_credits(tid: str):
 
 
 @app.post("/api/v1/tokens/credits/refresh-batch")
-def refresh_tokens_credits_batch(req: TokenCreditsBatchRefreshRequest):
+def refresh_tokens_credits_batch(
+    req: TokenCreditsBatchRefreshRequest, request: Request
+):
+    _require_admin_auth(request)
     ids = req.ids if isinstance(req.ids, list) else None
     token_ids: List[str] = []
     if ids:
@@ -2476,12 +2573,16 @@ def refresh_tokens_credits_batch(req: TokenCreditsBatchRefreshRequest):
 
 
 @app.get("/api/v1/config")
-def get_config():
-    return config_manager.get_all()
+def get_config(request: Request):
+    _require_admin_auth(request)
+    cfg = config_manager.get_all()
+    cfg.pop("admin_session_secret", None)
+    return cfg
 
 
 @app.put("/api/v1/config")
-def update_config(req: ConfigUpdateRequest):
+def update_config(req: ConfigUpdateRequest, request: Request):
+    _require_admin_auth(request)
     incoming = req.model_dump(exclude_unset=True)
     if not incoming:
         return config_manager.get_all()
@@ -2489,6 +2590,20 @@ def update_config(req: ConfigUpdateRequest):
     update_data = {}
     if "api_key" in incoming:
         update_data["api_key"] = str(incoming["api_key"] or "").strip()
+    if "admin_username" in incoming:
+        admin_username = str(incoming["admin_username"] or "").strip()
+        if not admin_username:
+            raise HTTPException(
+                status_code=400, detail="admin_username cannot be empty"
+            )
+        update_data["admin_username"] = admin_username
+    if "admin_password" in incoming:
+        admin_password = str(incoming["admin_password"] or "")
+        if not admin_password:
+            raise HTTPException(
+                status_code=400, detail="admin_password cannot be empty"
+            )
+        update_data["admin_password"] = admin_password
     if "public_base_url" in incoming:
         update_data["public_base_url"] = str(incoming["public_base_url"] or "").strip()
     if "proxy" in incoming:
@@ -2592,12 +2707,14 @@ def update_config(req: ConfigUpdateRequest):
 
 
 @app.get("/api/v1/refresh-profiles")
-def refresh_profiles_list():
+def refresh_profiles_list(request: Request):
+    _require_admin_auth(request)
     return {"profiles": refresh_manager.list_profiles()}
 
 
 @app.post("/api/v1/refresh-profiles/export")
-def refresh_profiles_export(req: ExportSelectionRequest):
+def refresh_profiles_export(req: ExportSelectionRequest, request: Request):
+    _require_admin_auth(request)
     profile_ids = req.ids if isinstance(req.ids, list) else None
     exported = refresh_manager.export_bundles(profile_ids)
     return {
@@ -2609,7 +2726,8 @@ def refresh_profiles_export(req: ExportSelectionRequest):
 
 
 @app.post("/api/v1/refresh-profiles/export-cookies")
-def refresh_profiles_export_cookies(req: ExportSelectionRequest):
+def refresh_profiles_export_cookies(req: ExportSelectionRequest, request: Request):
+    _require_admin_auth(request)
     profile_ids = req.ids if isinstance(req.ids, list) else None
     exported = refresh_manager.export_cookies(profile_ids)
     return {
@@ -2621,7 +2739,8 @@ def refresh_profiles_export_cookies(req: ExportSelectionRequest):
 
 
 @app.post("/api/v1/refresh-profiles/import")
-def refresh_profiles_import(req: RefreshProfileImportRequest):
+def refresh_profiles_import(req: RefreshProfileImportRequest, request: Request):
+    _require_admin_auth(request)
     try:
         profile = refresh_manager.import_bundle(req.bundle, name=req.name)
         refresh_result = None
@@ -2641,7 +2760,8 @@ def refresh_profiles_import(req: RefreshProfileImportRequest):
 
 
 @app.post("/api/v1/refresh-profiles/import-cookie")
-def refresh_profiles_import_cookie(req: RefreshCookieImportRequest):
+def refresh_profiles_import_cookie(req: RefreshCookieImportRequest, request: Request):
+    _require_admin_auth(request)
     try:
         profile = refresh_manager.import_cookie(req.cookie, name=req.name)
         refresh_result = None
@@ -2661,7 +2781,10 @@ def refresh_profiles_import_cookie(req: RefreshCookieImportRequest):
 
 
 @app.post("/api/v1/refresh-profiles/import-batch")
-def refresh_profiles_import_batch(req: RefreshProfileBatchImportRequest):
+def refresh_profiles_import_batch(
+    req: RefreshProfileBatchImportRequest, request: Request
+):
+    _require_admin_auth(request)
     if not req.items:
         raise HTTPException(status_code=400, detail="items is required")
 
@@ -2725,7 +2848,10 @@ def refresh_profiles_import_batch(req: RefreshProfileBatchImportRequest):
 
 
 @app.post("/api/v1/refresh-profiles/import-cookie-batch")
-def refresh_profiles_import_cookie_batch(req: RefreshCookieBatchImportRequest):
+def refresh_profiles_import_cookie_batch(
+    req: RefreshCookieBatchImportRequest, request: Request
+):
+    _require_admin_auth(request)
     if not req.items:
         raise HTTPException(status_code=400, detail="items is required")
 
@@ -2789,7 +2915,8 @@ def refresh_profiles_import_cookie_batch(req: RefreshCookieBatchImportRequest):
 
 
 @app.post("/api/v1/refresh-profiles/{profile_id}/refresh-now")
-def refresh_profiles_refresh_now(profile_id: str):
+def refresh_profiles_refresh_now(profile_id: str, request: Request):
+    _require_admin_auth(request)
     try:
         return refresh_manager.refresh_once(profile_id)
     except KeyError:
@@ -2801,7 +2928,10 @@ def refresh_profiles_refresh_now(profile_id: str):
 
 
 @app.put("/api/v1/refresh-profiles/{profile_id}/enabled")
-def refresh_profiles_set_enabled(profile_id: str, req: RefreshProfileEnabledRequest):
+def refresh_profiles_set_enabled(
+    profile_id: str, req: RefreshProfileEnabledRequest, request: Request
+):
+    _require_admin_auth(request)
     try:
         profile = refresh_manager.set_enabled(profile_id, req.enabled)
         return {"status": "ok", "profile": profile}
@@ -2810,7 +2940,8 @@ def refresh_profiles_set_enabled(profile_id: str, req: RefreshProfileEnabledRequ
 
 
 @app.delete("/api/v1/refresh-profiles/{profile_id}")
-def refresh_profiles_delete(profile_id: str):
+def refresh_profiles_delete(profile_id: str, request: Request):
+    _require_admin_auth(request)
     try:
         refresh_manager.remove_profile(profile_id)
         return {"status": "ok"}
