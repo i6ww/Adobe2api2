@@ -299,3 +299,7 @@ Generated media retention policy:
   - `generated_max_size_mb` (default `1024`)
   - `generated_prune_size_mb` (default `200`)
 - When total generated file size exceeds `generated_max_size_mb`, service deletes old files until at least `generated_prune_size_mb` is reclaimed and total size falls back under threshold
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=leik1000/adobe2api&type=Date)](https://star-history.com/#leik1000/adobe2api&Date)

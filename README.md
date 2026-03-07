@@ -299,3 +299,7 @@ curl -X POST "http://127.0.0.1:6001/v1/images/generations" \
   - `generated_max_size_mb`（默认 `1024`）
   - `generated_prune_size_mb`（默认 `200`）
 - 当总大小超过 `generated_max_size_mb` 时，服务会删除旧文件，直到至少回收 `generated_prune_size_mb`且总大小降回阈值以内
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=leik1000/adobe2api&type=Date)](https://star-history.com/#leik1000/adobe2api&Date)
