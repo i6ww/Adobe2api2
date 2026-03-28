@@ -262,14 +262,22 @@ curl -X POST "http://127.0.0.1:6001/v1/images/generations" \
 - 可导出最简 `cookie_*.json`（仅包含 `cookie` 字段）
 - 详细说明见：`browser-cookie-exporter/README.md`
 
+**重要提示：建议优先使用无痕窗口导出 Cookie。**
+
+- 同一个浏览器的普通窗口里，如果你连续登录多个 Adobe 账号并反复导出，后一次登录通常会把前一次账号的 Cookie 顶掉
+- 结果就是：你前面导出的 Cookie 可能很快失效，导入后表现为刷新失败、账号掉线，或只能保留最后一次导出的账号
+- **最稳妥的做法：每个账号都在单独的无痕窗口中登录并导出，再分别导入**
+
 **插件安装与使用步骤：**
 
 1. 打开 Chrome 或 Edge 浏览器的扩展管理页：`chrome://extensions`
 2. 开启右上角的「开发者模式」
 3. 点击「加载已解压的扩展程序」，选择项目中的 `browser-cookie-exporter/` 目录
-4. 在浏览器中正常登录 [Adobe Firefly](https://firefly.adobe.com/)
-5. 点击浏览器工具栏的插件图标，选择导出范围
-6. 点击「导出最简 JSON」并保存文件
+4. 打开插件详情页，开启「允许在无痕模式下运行」
+5. 为每个 Adobe 账号分别打开一个新的无痕窗口
+6. 在对应的无痕窗口中登录 [Adobe Firefly](https://firefly.adobe.com/)
+7. 点击浏览器工具栏的插件图标，选择导出范围
+8. 点击「导出最简 JSON」并保存文件
 
 ### 第二步：导入到项目中
 
