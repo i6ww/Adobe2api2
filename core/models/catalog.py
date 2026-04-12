@@ -1,13 +1,39 @@
 from __future__ import annotations
 
-SUPPORTED_RATIOS = {"1:1", "16:9", "9:16", "4:3", "3:4"}
-RATIO_SUFFIX_MAP = {
+# 默认支持的所有比例
+SUPPORTED_RATIOS = {"1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "3:2", "5:4", "4:5", "2:3", "8:1", "1:4", "1:8"}
+
+# firefly-nano-banana-pro 支持的比例
+NANO_BANANA_PRO_RATIOS = {
     "1:1": "1x1",
     "16:9": "16x9",
     "9:16": "9x16",
     "4:3": "4x3",
     "3:4": "3x4",
+    "21:9": "21x9",
+    "5:4": "5x4",
+    "4:5": "4x5",
 }
+
+# firefly-nano-banana2 支持的比例
+NANO_BANANA2_RATIOS = {
+    "1:1": "1x1",
+    "16:9": "16x9",
+    "9:16": "9x16",
+    "4:3": "4x3",
+    "3:4": "3x4",
+    "21:9": "21x9",
+    "3:2": "3x2",
+    "5:4": "5x4",
+    "4:5": "4x5",
+    "2:3": "2x3",
+    "8:1": "8x1",
+    "1:4": "1x4",
+    "1:8": "1x8",
+}
+
+# 基础比例映射（默认）
+RATIO_SUFFIX_MAP = NANO_BANANA_PRO_RATIOS
 
 MODEL_CATALOG: dict[str, dict] = {}
 
@@ -18,9 +44,12 @@ def _register_nano_banana_family(
     upstream_model_id: str,
     upstream_model_version: str,
     family_label: str,
+    supported_ratios: dict = None,
 ) -> None:
+    # 使用指定的比例映射，如果没有指定则使用默认的
+    ratios_map = supported_ratios or RATIO_SUFFIX_MAP
     for res in ("1k", "2k", "4k"):
-        for ratio, suffix in RATIO_SUFFIX_MAP.items():
+        for ratio, suffix in ratios_map.items():
             model_id = f"{prefix}-{res}-{suffix}"
             MODEL_CATALOG[model_id] = {
                 "upstream_model": "google:firefly:colligo:nano-banana-pro",
@@ -37,18 +66,21 @@ _register_nano_banana_family(
     upstream_model_id="gemini-flash",
     upstream_model_version="nano-banana-2",
     family_label="Firefly Nano Banana Pro",
+    supported_ratios=NANO_BANANA_PRO_RATIOS,
 )
 _register_nano_banana_family(
     "firefly-nano-banana",
     upstream_model_id="gemini-flash",
     upstream_model_version="nano-banana-2",
     family_label="Firefly Nano Banana",
+    supported_ratios=NANO_BANANA_PRO_RATIOS,
 )
 _register_nano_banana_family(
     "firefly-nano-banana2",
     upstream_model_id="gemini-flash",
     upstream_model_version="nano-banana-3",
     family_label="Firefly Nano Banana 2",
+    supported_ratios=NANO_BANANA2_RATIOS,
 )
 
 DEFAULT_MODEL_ID = "firefly-nano-banana-pro-2k-16x9"
