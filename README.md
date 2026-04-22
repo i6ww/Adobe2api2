@@ -4,15 +4,16 @@
 
 ### ✨ 广告时间 (o゜▽゜)o☆
 
-这是我个人独立搭建和长期维护的网站：[**Pixelle Labs**](https://www.pixellelabs.com/)
+这是我个人独立搭建和长期维护的网站：[**3711api中转站**](https://www.371181668.xyz/)
 
-主要分享我正在开发的 **AI 创意工具**、图像/视频相关小产品和各种有趣实验。欢迎大家来逛逛、免费体验、随便玩耍 (๑•̀ㅂ•́)و✧；如果你有想法或需求，也非常欢迎反馈交流！ヾ(≧▽≦*)o
+欢迎大家来逛逛、免费体验、随便玩耍 (๑•̀ㅂ•́)و✧；如果你有想法或需求，也非常欢迎反馈交流！ヾ(≧▽≦*)o
 
 ---
 
 Adobe Firefly / OpenAI 兼容网关服务。
 
-English README: `README_EN.md`
+#修复了部分报错情况
+status_code=500, submit failed: 422 {"error_code":"validation_error","message":"Invalid Usage for Image Generation"}  已修复
 
 ## 功能概述
 
