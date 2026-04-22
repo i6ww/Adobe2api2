@@ -73,9 +73,9 @@ def build_image_payload_candidates(
     # 获取尺寸
     size = size_from_ratio(aspect_ratio, output_resolution)
     
-    # 使用传入的模型 ID 和版本
-    model_id = upstream_model_id
-    model_version = upstream_model_version
+    # 使用正确的模型 ID 和版本
+    model_id = "google:firefly:colligo:nano-banana-pro"
+    model_version = "nano-banana-2"
     
     # 完整的请求参数
     base_payload = {
