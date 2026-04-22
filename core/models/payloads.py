@@ -13,6 +13,14 @@ def size_from_ratio(ratio: str, output_resolution: str = "2K") -> dict:
             "9:16": {"width": 768, "height": 1360},
             "4:3": {"width": 1152, "height": 864},
             "3:4": {"width": 864, "height": 1152},
+            "21:9": {"width": 1536, "height": 640},
+            "3:2": {"width": 1280, "height": 854},
+            "5:4": {"width": 1024, "height": 819},
+            "4:5": {"width": 819, "height": 1024},
+            "2:3": {"width": 854, "height": 1280},
+            "8:1": {"width": 1024, "height": 128},
+            "1:4": {"width": 256, "height": 1024},
+            "1:8": {"width": 128, "height": 1024},
         }
     elif level == "4K":
         ratio_map = {
@@ -21,6 +29,14 @@ def size_from_ratio(ratio: str, output_resolution: str = "2K") -> dict:
             "9:16": {"width": 3072, "height": 5504},
             "4:3": {"width": 4096, "height": 3072},
             "3:4": {"width": 3072, "height": 4096},
+            "21:9": {"width": 6144, "height": 2560},
+            "3:2": {"width": 5120, "height": 3413},
+            "5:4": {"width": 4096, "height": 3277},
+            "4:5": {"width": 3277, "height": 4096},
+            "2:3": {"width": 3413, "height": 5120},
+            "8:1": {"width": 4096, "height": 512},
+            "1:4": {"width": 1024, "height": 4096},
+            "1:8": {"width": 512, "height": 4096},
         }
     else:
         ratio_map = {
@@ -29,6 +45,14 @@ def size_from_ratio(ratio: str, output_resolution: str = "2K") -> dict:
             "9:16": {"width": 1536, "height": 2752},
             "4:3": {"width": 2048, "height": 1536},
             "3:4": {"width": 1536, "height": 2048},
+            "21:9": {"width": 3072, "height": 1280},
+            "3:2": {"width": 2560, "height": 1707},
+            "5:4": {"width": 2048, "height": 1638},
+            "4:5": {"width": 1638, "height": 2048},
+            "2:3": {"width": 1707, "height": 2560},
+            "8:1": {"width": 2048, "height": 256},
+            "1:4": {"width": 512, "height": 2048},
+            "1:8": {"width": 256, "height": 2048},
         }
     return ratio_map.get(ratio, ratio_map["16:9"])
 
