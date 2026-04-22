@@ -88,7 +88,10 @@ def build_image_payload_candidates(
         "groundSearch": False,
         "skipCai": False,
         "output": {"storeInputs": True},
-        "generationMetadata": {"module": "text2image"},
+        "generationMetadata": {
+            "module": "text2image",
+            "submodule": "ff-image-generate",
+        },
         "modelSpecificPayload": {
             "aspectRatio": aspect_ratio,
             "parameters": {"addWatermark": False},
@@ -101,7 +104,10 @@ def build_image_payload_candidates(
 
     candidates: list[dict] = []
     edited = dict(base_payload)
-    edited["generationMetadata"] = {"module": "image2image"}
+    edited["generationMetadata"] = {
+        "module": "image2image",
+        "submodule": "ff-image-generate",
+    }
 
     c1 = dict(edited)
     c1["referenceBlobs"] = [

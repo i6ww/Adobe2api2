@@ -7,7 +7,7 @@ API_KEY = "123456"
 
 def generate_image():
     """使用指定模型生成图片"""
-    url = f"{BASE_URL}/v1/images/generations"
+    url = f"{BASE_URL}/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json"
@@ -15,15 +15,16 @@ def generate_image():
     
     # 请求体
     data = {
-        "model": "firefly-nano-banana-pro-1k-16x9",
-        "prompt": "A beautiful sunset over the mountains, with a lake in the foreground and pine trees on the hillside",
-        "n": 1  # 生成一张图片
+        "model": "firefly-nano-banana-pro-2k-16x9",
+        "messages": [
+            {"role": "user", "content": "a cinematic mountain sunrise"}
+        ]
     }
     
     try:
         print("正在生成图片...")
         print(f"模型: {data['model']}")
-        print(f"提示词: {data['prompt']}")
+        print(f"提示词: {data['messages'][0]['content']}")
         
         response = requests.post(url, headers=headers, json=data)
         response.raise_for_status()  # 检查响应状态
@@ -33,11 +34,13 @@ def generate_image():
         print("\n=== 生成结果 ===")
         print(f"创建时间: {result['created']}")
         print(f"使用模型: {result['model']}")
+        print(f"ID: {result['id']}")
         
         # 打印生成的图片URL
-        for i, image in enumerate(result['data']):
-            print(f"\n图片 {i+1}:")
-            print(f"URL: {image['url']}")
+        for i, choice in enumerate(result['choices']):
+            print(f"\n选择 {i+1}:")
+            print(f"消息: {choice['message']['content']}")
+            print(f"完成原因: {choice['finish_reason']}")
         
         return result
         
