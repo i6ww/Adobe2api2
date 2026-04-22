@@ -84,6 +84,7 @@ def build_image_payload_candidates(
         "prompt": prompt,
         "size": size,
         "aspectRatio": aspect_ratio,
+        "generationMetadata": {"module": "text2image"},
     }
 
     if not source_image_ids:
