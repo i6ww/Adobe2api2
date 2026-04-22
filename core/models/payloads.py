@@ -73,45 +73,27 @@ def build_image_payload_candidates(
     # 获取尺寸
     size = size_from_ratio(aspect_ratio, output_resolution)
     
+    # 使用正确的模型 ID 和版本
+    model_id = "google:firefly:colligo:nano-banana-pro"
+    model_version = "nano-banana-2"
+    
+    # 简化请求参数
     base_payload = {
-        "modelId": upstream_model_id,
-        "modelVersion": upstream_model_version,
-        "n": 1,
+        "modelId": model_id,
+        "modelVersion": model_version,
         "prompt": prompt,
         "size": size,
-        "seeds": [int(time.time()) % 999999],
-        "groundSearch": False,
-        "skipCai": False,
-        "output": {"storeInputs": True},
-        "generationMetadata": {"module": "text2image"},
-        "modelSpecificPayload": {
-            "aspectRatio": aspect_ratio,
-            "parameters": {"addWatermark": False},
-        },
+        "aspectRatio": aspect_ratio,
     }
 
     if not source_image_ids:
-        base_payload["referenceBlobs"] = []
         return [base_payload]
 
     candidates: list[dict] = []
     edited = dict(base_payload)
-    edited["generationMetadata"] = {"module": "image2image"}
-
-    c1 = dict(edited)
-    c1["referenceBlobs"] = [
+    edited["referenceBlobs"] = [
         {"id": img_id, "usage": "general"} for img_id in source_image_ids
     ]
-    candidates.append(c1)
-
-    c4 = dict(edited)
-    c4["referenceBlobs"] = []
-    c4["imagePrompt"] = {"referenceImage": source_image_ids[0]}
-    candidates.append(c4)
-
-    c5 = dict(edited)
-    c5["referenceBlobs"] = []
-    c5["imagePrompt"] = {"referenceImage": {"id": source_image_ids[0]}}
-    candidates.append(c5)
+    candidates.append(edited)
 
     return candidates

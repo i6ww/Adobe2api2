@@ -1,7 +1,7 @@
 import requests
 
 # 服务器地址
-BASE_URL = "http://127.0.0.1:6001"
+BASE_URL = "http://43.165.172.5:6001"
 # API密钥
 API_KEY = "123456"
 
@@ -15,7 +15,7 @@ def generate_image():
     
     # 请求体
     data = {
-        "model": "firefly-nano-banana-pro-1k-21x9",
+        "model": "firefly-nano-banana-pro-1k-16x9",
         "prompt": "A beautiful sunset over the mountains, with a lake in the foreground and pine trees on the hillside",
         "n": 1  # 生成一张图片
     }
