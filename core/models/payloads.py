@@ -74,8 +74,8 @@ def build_image_payload_candidates(
     size = size_from_ratio(aspect_ratio, output_resolution)
     
     # 使用正确的模型 ID 和版本
-    model_id = "google:firefly:colligo:nano-banana-pro"
-    model_version = "nano-banana-2"
+    model_id = "gemini-flash"
+    model_version = "nano-banana-3"
     
     # 完整的请求参数
     base_payload = {
@@ -114,15 +114,5 @@ def build_image_payload_candidates(
         {"id": img_id, "usage": "general"} for img_id in source_image_ids
     ]
     candidates.append(c1)
-
-    c4 = dict(edited)
-    c4["referenceBlobs"] = []
-    c4["imagePrompt"] = {"referenceImage": source_image_ids[0]}
-    candidates.append(c4)
-
-    c5 = dict(edited)
-    c5["referenceBlobs"] = []
-    c5["imagePrompt"] = {"referenceImage": {"id": source_image_ids[0]}}
-    candidates.append(c5)
 
     return candidates

@@ -606,7 +606,7 @@ class AdobeClient:
             job_id = path_parts[-1]
             if not job_id:
                 return raw_url
-            return f"https://bks-epo8522.adobe.io/v2/jobs/result/{job_id}?host={host}/"
+            return f"https://{host}/v2/jobs/result/{job_id}?host={host}/"
         except Exception:
             return raw_url
 
