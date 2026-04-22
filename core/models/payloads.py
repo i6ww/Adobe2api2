@@ -13,11 +13,11 @@ def size_from_ratio(ratio: str, output_resolution: str = "2K") -> dict:
             "9:16": {"width": 768, "height": 1360},
             "4:3": {"width": 1152, "height": 864},
             "3:4": {"width": 864, "height": 1152},
-            "21:9": {"width": 1536, "height": 640},
-            "3:2": {"width": 1280, "height": 854},
+            "21:9": {"width": 1408, "height": 608},
+            "3:2": {"width": 1280, "height": 853},
             "5:4": {"width": 1024, "height": 819},
             "4:5": {"width": 819, "height": 1024},
-            "2:3": {"width": 854, "height": 1280},
+            "2:3": {"width": 853, "height": 1280},
             "8:1": {"width": 1024, "height": 128},
             "1:4": {"width": 256, "height": 1024},
             "1:8": {"width": 128, "height": 1024},
@@ -29,7 +29,7 @@ def size_from_ratio(ratio: str, output_resolution: str = "2K") -> dict:
             "9:16": {"width": 3072, "height": 5504},
             "4:3": {"width": 4096, "height": 3072},
             "3:4": {"width": 3072, "height": 4096},
-            "21:9": {"width": 6144, "height": 2560},
+            "21:9": {"width": 5632, "height": 2432},
             "3:2": {"width": 5120, "height": 3413},
             "5:4": {"width": 4096, "height": 3277},
             "4:5": {"width": 3277, "height": 4096},
@@ -45,7 +45,7 @@ def size_from_ratio(ratio: str, output_resolution: str = "2K") -> dict:
             "9:16": {"width": 1536, "height": 2752},
             "4:3": {"width": 2048, "height": 1536},
             "3:4": {"width": 1536, "height": 2048},
-            "21:9": {"width": 3072, "height": 1280},
+            "21:9": {"width": 2816, "height": 1216},
             "3:2": {"width": 2560, "height": 1707},
             "5:4": {"width": 2048, "height": 1638},
             "4:5": {"width": 1638, "height": 2048},
@@ -66,12 +66,19 @@ def build_image_payload_candidates(
     upstream_model_version: str,
     source_image_ids: Optional[list[str]] = None,
 ) -> list[dict]:
+    # 确保 aspect_ratio 格式正确
+    if not aspect_ratio or not isinstance(aspect_ratio, str):
+        aspect_ratio = "16:9"
+    
+    # 获取尺寸
+    size = size_from_ratio(aspect_ratio, output_resolution)
+    
     base_payload = {
         "modelId": upstream_model_id,
         "modelVersion": upstream_model_version,
         "n": 1,
         "prompt": prompt,
-        "size": size_from_ratio(aspect_ratio, output_resolution),
+        "size": size,
         "seeds": [int(time.time()) % 999999],
         "groundSearch": False,
         "skipCai": False,
