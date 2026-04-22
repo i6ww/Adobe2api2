@@ -4,7 +4,7 @@
 
 ### ✨ 广告时间 (o゜▽゜)o☆
 
-这是我个人独立搭建和长期维护的网站：[**3711api**](https://www.371181668.xyz/)
+这是我个人独立搭建和长期维护的网站：[**Pixelle Labs**](https://www.pixellelabs.com/)
 
 主要分享我正在开发的 **AI 创意工具**、图像/视频相关小产品和各种有趣实验。欢迎大家来逛逛、免费体验、随便玩耍 (๑•̀ㅂ•́)و✧；如果你有想法或需求，也非常欢迎反馈交流！ヾ(≧▽≦*)o
 
@@ -14,8 +14,7 @@ Adobe Firefly / OpenAI 兼容网关服务。
 
 English README: `README_EN.md`
 
-
-当前设计：
+## 功能概述
 
 - 对外统一入口：`/v1/chat/completions`（图像 + 视频）
 - 可选图像专用接口：`/v1/images/generations`
@@ -62,22 +61,32 @@ docker compose up -d --build
 
 管理后台和管理 API 需要先通过 `/api/v1/auth/login` 登录并持有会话 Cookie。
 
-## 3）外部 API 使用
+## 3）支持的模型
 
-### 3.0 支持的模型族
+### 3.0 获取完整模型列表
 
-当前支持如下模型族：
+```bash
+curl -X GET "http://127.0.0.1:6001/v1/models" \
+  -H "Authorization: Bearer <service_api_key>"
+```
 
-- `firefly-nano-banana-*`（图像，对应上游 `nano-banana-2`）
-- `firefly-nano-banana2-*`（图像，对应上游 `nano-banana-3`）
-- `firefly-nano-banana-pro-*`（图像）
-- `firefly-sora2-*`（视频）
-- `firefly-sora2-pro-*`（视频）
-- `firefly-veo31-*`（视频）
-- `firefly-veo31-ref-*`（视频，参考图模式）
-- `firefly-veo31-fast-*`（视频）
+### 3.1 图像模型
 
-Nano Banana 图像模型（`nano-banana-2`）：
+| 模型 ID | 描述 |
+|---------|------|
+| `flux` | Flux 标准模型 |
+| `fluxPro` | Flux Pro 模型 |
+| `fluxUltra` | Flux Ultra 模型 |
+| `dall-e-3` | DALL-E 3 模型 |
+| `stable-diffusion-3` | Stable Diffusion 3 模型 |
+| `image-3` | Adobe Image 3 模型 |
+| `firefly` | Adobe Firefly 标准模型 |
+| `firefly-3` | Adobe Firefly 3 模型 |
+| `firefly-real` | Adobe Firefly 写实模型 |
+| `firefly-style` | Adobe Firefly 风格模型 |
+| `firefly-structure` | Adobe Firefly 结构模型 |
+
+**Nano Banana 系列**（兼容旧命名）：
 
 - 命名：`firefly-nano-banana-{resolution}-{ratio}`
 - 分辨率：`1k` / `2k` / `4k`
@@ -86,25 +95,27 @@ Nano Banana 图像模型（`nano-banana-2`）：
   - `firefly-nano-banana-2k-16x9`
   - `firefly-nano-banana-4k-1x1`
 
-Nano Banana 2 图像模型（`nano-banana-3`）：
+**Nano Banana 2 系列**：
 
 - 命名：`firefly-nano-banana2-{resolution}-{ratio}`
 - 分辨率：`1k` / `2k` / `4k`
-- 比例后缀：`1x1` / `16x9` / `9x16` / `4x3` / `3x4`
+- 比例后缀：`1x1` / `16x9` / `9x16` / `4x3` / `3x4` / `21x9` / `3x2` / `5x4` / `4x5` / `2x3` / `8x1` / `1x4` / `1x8`
 - 示例：
   - `firefly-nano-banana2-2k-16x9`
   - `firefly-nano-banana2-4k-1x1`
 
-Nano Banana Pro 图像模型（兼容旧命名）：
+**Nano Banana Pro 系列**（推荐）：
 
 - 命名：`firefly-nano-banana-pro-{resolution}-{ratio}`
 - 分辨率：`1k` / `2k` / `4k`
-- 比例后缀：`1x1` / `16x9` / `9x16` / `4x3` / `3x4`
+- 比例后缀：`1x1` / `16x9` / `9x16` / `4x3` / `3x4` / `21x9` / `5x4` / `4x5`
 - 示例：
   - `firefly-nano-banana-pro-2k-16x9`
   - `firefly-nano-banana-pro-4k-1x1`
 
-Sora2 视频模型：
+### 3.2 视频模型
+
+**Sora2 系列**：
 
 - 命名：`firefly-sora2-{duration}-{ratio}`
 - 时长：`4s` / `8s` / `12s`
@@ -113,7 +124,7 @@ Sora2 视频模型：
   - `firefly-sora2-4s-16x9`
   - `firefly-sora2-8s-9x16`
 
-Sora2 Pro 视频模型：
+**Sora2 Pro 系列**：
 
 - 命名：`firefly-sora2-pro-{duration}-{ratio}`
 - 时长：`4s` / `8s` / `12s`
@@ -122,7 +133,7 @@ Sora2 Pro 视频模型：
   - `firefly-sora2-pro-4s-16x9`
   - `firefly-sora2-pro-8s-9x16`
 
-Veo31 视频模型：
+**Veo31 系列**：
 
 - 命名：`firefly-veo31-{duration}-{ratio}-{resolution}`
 - 时长：`4s` / `6s` / `8s`
@@ -136,20 +147,20 @@ Veo31 视频模型：
   - `firefly-veo31-4s-16x9-1080p`
   - `firefly-veo31-6s-9x16-720p`
 
-Veo31 Ref 视频模型（参考图模式）：
+**Veo31 Ref 系列**（参考图模式）：
 
 - 命名：`firefly-veo31-ref-{duration}-{ratio}-{resolution}`
 - 时长：`4s` / `6s` / `8s`
 - 比例：`16x9` / `9x16`
 - 分辨率：`1080p` / `720p`
 - 始终使用参考图模式（不是首尾帧模式）
-- 最多支持 3 张参考图（映射到上游 `referenceBlobs[].usage="asset"`）
+- 最多支持 3 张参考图
 - 示例：
   - `firefly-veo31-ref-4s-9x16-720p`
   - `firefly-veo31-ref-6s-16x9-1080p`
   - `firefly-veo31-ref-8s-9x16-1080p`
 
-Veo31 Fast 视频模型：
+**Veo31 Fast 系列**：
 
 - 命名：`firefly-veo31-fast-{duration}-{ratio}-{resolution}`
 - 时长：`4s` / `6s` / `8s`
@@ -163,14 +174,9 @@ Veo31 Fast 视频模型：
   - `firefly-veo31-fast-4s-16x9-1080p`
   - `firefly-veo31-fast-6s-9x16-720p`
 
-### 3.1 获取模型列表
+## 4）API 使用
 
-```bash
-curl -X GET "http://127.0.0.1:6001/v1/models" \
-  -H "Authorization: Bearer <service_api_key>"
-```
-
-### 3.2 统一入口：`/v1/chat/completions`
+### 4.1 统一入口：`/v1/chat/completions`
 
 文生图：
 
@@ -179,7 +185,7 @@ curl -X POST "http://127.0.0.1:6001/v1/chat/completions" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "firefly-nano-banana-pro-2k-16x9",
+    "model": "flux",
     "messages": [{"role":"user","content":"a cinematic mountain sunrise"}]
   }'
 ```
@@ -191,7 +197,7 @@ curl -X POST "http://127.0.0.1:6001/v1/chat/completions" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "firefly-nano-banana-pro-2k-16x9",
+    "model": "flux",
     "messages": [{
       "role":"user",
       "content":[
@@ -214,14 +220,6 @@ curl -X POST "http://127.0.0.1:6001/v1/chat/completions" \
   }'
 ```
 
-Veo31 单图语义说明：
-
-- `firefly-veo31-*` / `firefly-veo31-fast-*`：帧模式
-  - 1 张图 => 首帧
-  - 2 张图 => 首帧 + 尾帧
-- `firefly-veo31-ref-*`：参考图模式
-  - 1~3 张图 => 参考图
-
 图生视频：
 
 ```bash
@@ -240,19 +238,26 @@ curl -X POST "http://127.0.0.1:6001/v1/chat/completions" \
   }'
 ```
 
-### 3.3 图像接口：`/v1/images/generations`
+### 4.2 图像专用接口：`/v1/images/generations`
 
 ```bash
 curl -X POST "http://127.0.0.1:6001/v1/images/generations" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "firefly-nano-banana-pro-4k-16x9",
+    "model": "flux",
     "prompt": "futuristic city skyline at dusk"
   }'
 ```
 
-## 4）Cookie 导入
+### 4.3 视频参考图语义说明
+
+| 模型类型 | 1 张图 | 2 张图 | 3 张图 |
+|----------|--------|--------|--------|
+| `firefly-veo31-*` / `firefly-veo31-fast-*` | 首帧参考 | 首帧+尾帧参考 | 不支持 |
+| `firefly-veo31-ref-*` | 参考图 | 参考图 | 参考图 |
+
+## 5）Cookie 导入
 
 ### 第一步：使用浏览器插件导出（推荐）
 
@@ -292,7 +297,7 @@ curl -X POST "http://127.0.0.1:6001/v1/images/generations" \
 
 **批量导入：** 导入弹窗支持一次上传多个文件，或粘贴包含多个账户信息的 JSON 数组。
 
-## 5）存储路径
+## 6）存储路径
 
 - 生成媒体文件：`data/generated/`
 - 请求日志：`data/request_logs.jsonl`
@@ -300,7 +305,7 @@ curl -X POST "http://127.0.0.1:6001/v1/images/generations" \
 - 服务配置：`config/config.json`
 - 刷新配置（本地私有）：`config/refresh_profile.json`
 
-生成媒体保留策略：
+**生成媒体保留策略：**
 
 - `data/generated/` 下文件会保留，并通过 `/generated/*` 对外访问
 - 启用按容量阈值自动清理（最旧文件优先）

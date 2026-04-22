@@ -15,7 +15,7 @@ def generate_image():
     
     # 请求体
     data = {
-        "model": "flux",
+        "model": "firefly-nano-banana2-2k-21x9",
         "messages": [
             {"role": "user", "content": "a cinematic mountain sunrise"}
         ]

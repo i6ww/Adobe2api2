@@ -14,8 +14,7 @@ Adobe Firefly/OpenAI-compatible gateway service.
 
 Chinese README: `README.md`
 
-
-Current design:
+## Overview
 
 - External unified entry: `/v1/chat/completions` (image + video)
 - Optional image-only endpoint: `/v1/images/generations`
@@ -42,7 +41,7 @@ uvicorn app:app --host 0.0.0.0 --port 6001 --reload
 
 - URL: `http://127.0.0.1:6001/`
 - Default login: `admin / admin`
-- You can change credentials in "系统配置" (System Config) or edit `config/config.json`
+- You can change credentials in "System Config" or edit `config/config.json`
 
 ### B. Docker Deployment (Recommended)
 
@@ -62,22 +61,32 @@ Service API key is configured in `config/config.json` (`api_key`).
 
 Admin UI and admin APIs require login session cookie via `/api/v1/auth/login`.
 
-## 3) External API usage
+## 3) Supported Models
 
-### 3.0 Supported model families
+### 3.0 List all models
 
-Current supported model families are:
+```bash
+curl -X GET "http://127.0.0.1:6001/v1/models" \
+  -H "Authorization: Bearer <service_api_key>"
+```
 
-- `firefly-nano-banana-*` (image, maps to upstream `nano-banana-2`)
-- `firefly-nano-banana2-*` (image, maps to upstream `nano-banana-3`)
-- `firefly-nano-banana-pro-*` (image)
-- `firefly-sora2-*` (video)
-- `firefly-sora2-pro-*` (video)
-- `firefly-veo31-*` (video)
-- `firefly-veo31-ref-*` (video, reference-image mode)
-- `firefly-veo31-fast-*` (video)
+### 3.1 Image Models
 
-Nano Banana image models (`nano-banana-2`):
+| Model ID | Description |
+|----------|-------------|
+| `flux` | Flux standard model |
+| `fluxPro` | Flux Pro model |
+| `fluxUltra` | Flux Ultra model |
+| `dall-e-3` | DALL-E 3 model |
+| `stable-diffusion-3` | Stable Diffusion 3 model |
+| `image-3` | Adobe Image 3 model |
+| `firefly` | Adobe Firefly standard model |
+| `firefly-3` | Adobe Firefly 3 model |
+| `firefly-real` | Adobe Firefly photorealistic model |
+| `firefly-style` | Adobe Firefly style model |
+| `firefly-structure` | Adobe Firefly structure model |
+
+**Nano Banana Series** (legacy-compatible naming):
 
 - Pattern: `firefly-nano-banana-{resolution}-{ratio}`
 - Resolution: `1k` / `2k` / `4k`
@@ -86,25 +95,27 @@ Nano Banana image models (`nano-banana-2`):
   - `firefly-nano-banana-2k-16x9`
   - `firefly-nano-banana-4k-1x1`
 
-Nano Banana 2 image models (`nano-banana-3`):
+**Nano Banana 2 Series**:
 
 - Pattern: `firefly-nano-banana2-{resolution}-{ratio}`
 - Resolution: `1k` / `2k` / `4k`
-- Ratio suffix: `1x1` / `16x9` / `9x16` / `4x3` / `3x4`
+- Ratio suffix: `1x1` / `16x9` / `9x16` / `4x3` / `3x4` / `21x9` / `3x2` / `5x4` / `4x5` / `2x3` / `8x1` / `1x4` / `1x8`
 - Examples:
   - `firefly-nano-banana2-2k-16x9`
   - `firefly-nano-banana2-4k-1x1`
 
-Nano Banana Pro image models (legacy-compatible):
+**Nano Banana Pro Series** (recommended):
 
 - Pattern: `firefly-nano-banana-pro-{resolution}-{ratio}`
 - Resolution: `1k` / `2k` / `4k`
-- Ratio suffix: `1x1` / `16x9` / `9x16` / `4x3` / `3x4`
+- Ratio suffix: `1x1` / `16x9` / `9x16` / `4x3` / `3x4` / `21x9` / `5x4` / `4x5`
 - Examples:
   - `firefly-nano-banana-pro-2k-16x9`
   - `firefly-nano-banana-pro-4k-1x1`
 
-Sora2 video models:
+### 3.2 Video Models
+
+**Sora2 Series**:
 
 - Pattern: `firefly-sora2-{duration}-{ratio}`
 - Duration: `4s` / `8s` / `12s`
@@ -113,7 +124,7 @@ Sora2 video models:
   - `firefly-sora2-4s-16x9`
   - `firefly-sora2-8s-9x16`
 
-Sora2 Pro video models:
+**Sora2 Pro Series**:
 
 - Pattern: `firefly-sora2-pro-{duration}-{ratio}`
 - Duration: `4s` / `8s` / `12s`
@@ -122,7 +133,7 @@ Sora2 Pro video models:
   - `firefly-sora2-pro-4s-16x9`
   - `firefly-sora2-pro-8s-9x16`
 
-Veo31 video models:
+**Veo31 Series**:
 
 - Pattern: `firefly-veo31-{duration}-{ratio}-{resolution}`
 - Duration: `4s` / `6s` / `8s`
@@ -136,20 +147,20 @@ Veo31 video models:
   - `firefly-veo31-4s-16x9-1080p`
   - `firefly-veo31-6s-9x16-720p`
 
-Veo31 Ref video models (reference-image mode):
+**Veo31 Ref Series** (reference-image mode):
 
 - Pattern: `firefly-veo31-ref-{duration}-{ratio}-{resolution}`
 - Duration: `4s` / `6s` / `8s`
 - Ratio: `16x9` / `9x16`
 - Resolution: `1080p` / `720p`
 - Always uses reference image mode (not first/last frame mode)
-- Supports up to 3 reference images (mapped to upstream `referenceBlobs[].usage="asset"`)
+- Supports up to 3 reference images
 - Examples:
   - `firefly-veo31-ref-4s-9x16-720p`
   - `firefly-veo31-ref-6s-16x9-1080p`
   - `firefly-veo31-ref-8s-9x16-1080p`
 
-Veo31 Fast video models:
+**Veo31 Fast Series**:
 
 - Pattern: `firefly-veo31-fast-{duration}-{ratio}-{resolution}`
 - Duration: `4s` / `6s` / `8s`
@@ -163,14 +174,9 @@ Veo31 Fast video models:
   - `firefly-veo31-fast-4s-16x9-1080p`
   - `firefly-veo31-fast-6s-9x16-720p`
 
-### 3.1 List models
+## 4) API Usage
 
-```bash
-curl -X GET "http://127.0.0.1:6001/v1/models" \
-  -H "Authorization: Bearer <service_api_key>"
-```
-
-### 3.2 Unified endpoint: `/v1/chat/completions`
+### 4.1 Unified endpoint: `/v1/chat/completions`
 
 Text-to-image:
 
@@ -179,7 +185,7 @@ curl -X POST "http://127.0.0.1:6001/v1/chat/completions" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "firefly-nano-banana-pro-2k-16x9",
+    "model": "flux",
     "messages": [{"role":"user","content":"a cinematic mountain sunrise"}]
   }'
 ```
@@ -191,7 +197,7 @@ curl -X POST "http://127.0.0.1:6001/v1/chat/completions" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "firefly-nano-banana-pro-2k-16x9",
+    "model": "flux",
     "messages": [{
       "role":"user",
       "content":[
@@ -214,14 +220,6 @@ curl -X POST "http://127.0.0.1:6001/v1/chat/completions" \
   }'
 ```
 
-Veo31 single-image semantics:
-
-- `firefly-veo31-*` / `firefly-veo31-fast-*`: frame mode
-  - 1 image => first frame
-  - 2 images => first frame + last frame
-- `firefly-veo31-ref-*`: reference-image mode
-  - 1~3 images => reference images
-
 Image-to-video:
 
 ```bash
@@ -240,19 +238,26 @@ curl -X POST "http://127.0.0.1:6001/v1/chat/completions" \
   }'
 ```
 
-### 3.3 Image endpoint: `/v1/images/generations`
+### 4.2 Image endpoint: `/v1/images/generations`
 
 ```bash
 curl -X POST "http://127.0.0.1:6001/v1/images/generations" \
   -H "Authorization: Bearer <service_api_key>" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "firefly-nano-banana-pro-4k-16x9",
+    "model": "flux",
     "prompt": "futuristic city skyline at dusk"
   }'
 ```
 
-## 4) Cookie Import
+### 4.3 Video Reference Image Semantics
+
+| Model Type | 1 Image | 2 Images | 3 Images |
+|-------------|---------|----------|----------|
+| `firefly-veo31-*` / `firefly-veo31-fast-*` | First frame | First + last frame | Not supported |
+| `firefly-veo31-ref-*` | Reference | Reference | Reference |
+
+## 5) Cookie Import
 
 ### Step 1: Export using the Browser Extension (Recommended)
 
@@ -262,14 +267,22 @@ This project includes a companion browser extension to help you easily export re
 - Exports a minimal `cookie_*.json` (containing only the `cookie` field)
 - Detailed instructions: `browser-cookie-exporter/README.md`
 
+**Important: Use incognito window for better results.**
+
+- In the same browser's regular window, if you log into multiple Adobe accounts and export repeatedly, the later login typically invalidates the earlier account's cookies
+- This means: cookies exported first may expire quickly, showing as refresh failures, account disconnections, or only keeping the last exported account
+- **Safest approach: Log in and export each account in a separate incognito window, then import separately**
+
 **Installation & Usage:**
 
 1. Open Chrome or Edge extension management: `chrome://extensions`
 2. Enable "Developer mode" in the top right
 3. Click "Load unpacked" and select the `browser-cookie-exporter/` directory from this project
-4. Log in to [Adobe Firefly](https://firefly.adobe.com/) as usual
-5. Click the extension icon in your browser toolbar and select the export scope
-6. Click "Export Minimal JSON" and save the file
+4. Open the extension details and enable "Allow in incognito"
+5. Open a new incognito window for each Adobe account
+6. Log in to [Adobe Firefly](https://firefly.adobe.com/) in the corresponding incognito window
+7. Click the extension icon in your browser toolbar and select the export scope
+8. Click "Export Minimal JSON" and save the file
 
 ### Step 2: Import into the Project
 
@@ -284,7 +297,7 @@ Once you have the exported JSON file, follow these steps to import it:
 
 **Batch Import:** The import dialog supports uploading multiple files at once or pasting a JSON array containing multiple account credentials.
 
-## 5) Storage Paths
+## 6) Storage Paths
 
 - Generated media: `data/generated/`
 - Request logs: `data/request_logs.jsonl`
@@ -292,7 +305,7 @@ Once you have the exported JSON file, follow these steps to import it:
 - Service config: `config/config.json`
 - Refresh profile (local private): `config/refresh_profile.json`
 
-Generated media retention policy:
+**Generated Media Retention Policy:**
 
 - Files under `data/generated/` are preserved and served via `/generated/*`
 - Auto-prune is enabled by size threshold (oldest files first)
