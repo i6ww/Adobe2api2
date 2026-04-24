@@ -93,6 +93,36 @@ curl -X GET "http://127.0.0.1:6001/v1/models" \
 | `firefly-gpt-image-2-3x2` | Firefly GPT Image 2 (3:2) |
 | `firefly-gpt-image-2-2x3` | Firefly GPT Image 2 (2:3) |
 
+**GPT Image 2 4K Quality Series**：
+
+| Model ID | Description |
+|----------|-------------|
+| `firefly-gpt-image-2-4k` | Firefly GPT Image 2 (4K) |
+| `firefly-gpt-image-2-4k-1x1-l` | Firefly GPT Image 2 (4K 1:1 Low Quality) |
+| `firefly-gpt-image-2-4k-1x1-m` | Firefly GPT Image 2 (4K 1:1 Medium Quality) |
+| `firefly-gpt-image-2-4k-1x1-h` | Firefly GPT Image 2 (4K 1:1 High Quality) |
+| `firefly-gpt-image-2-4k-16x9-l` | Firefly GPT Image 2 (4K 16:9 Low Quality) |
+| `firefly-gpt-image-2-4k-16x9-m` | Firefly GPT Image 2 (4K 16:9 Medium Quality) |
+| `firefly-gpt-image-2-4k-16x9-h` | Firefly GPT Image 2 (4K 16:9 High Quality) |
+| `firefly-gpt-image-2-4k-9x16-l` | Firefly GPT Image 2 (4K 9:16 Low Quality) |
+| `firefly-gpt-image-2-4k-9x16-m` | Firefly GPT Image 2 (4K 9:16 Medium Quality) |
+| `firefly-gpt-image-2-4k-9x16-h` | Firefly GPT Image 2 (4K 9:16 High Quality) |
+| `firefly-gpt-image-2-4k-4x3-l` | Firefly GPT Image 2 (4K 4:3 Low Quality) |
+| `firefly-gpt-image-2-4k-4x3-m` | Firefly GPT Image 2 (4K 4:3 Medium Quality) |
+| `firefly-gpt-image-2-4k-4x3-h` | Firefly GPT Image 2 (4K 4:3 High Quality) |
+| `firefly-gpt-image-2-4k-5x4-l` | Firefly GPT Image 2 (4K 5:4 Low Quality) |
+| `firefly-gpt-image-2-4k-5x4-m` | Firefly GPT Image 2 (4K 5:4 Medium Quality) |
+| `firefly-gpt-image-2-4k-5x4-h` | Firefly GPT Image 2 (4K 5:4 High Quality) |
+| `firefly-gpt-image-2-4k-4x5-l` | Firefly GPT Image 2 (4K 4:5 Low Quality) |
+| `firefly-gpt-image-2-4k-4x5-m` | Firefly GPT Image 2 (4K 4:5 Medium Quality) |
+| `firefly-gpt-image-2-4k-4x5-h` | Firefly GPT Image 2 (4K 4:5 High Quality) |
+| `firefly-gpt-image-2-4k-3x2-l` | Firefly GPT Image 2 (4K 3:2 Low Quality) |
+| `firefly-gpt-image-2-4k-3x2-m` | Firefly GPT Image 2 (4K 3:2 Medium Quality) |
+| `firefly-gpt-image-2-4k-3x2-h` | Firefly GPT Image 2 (4K 3:2 High Quality) |
+| `firefly-gpt-image-2-4k-2x3-l` | Firefly GPT Image 2 (4K 2:3 Low Quality) |
+| `firefly-gpt-image-2-4k-2x3-m` | Firefly GPT Image 2 (4K 2:3 Medium Quality) |
+| `firefly-gpt-image-2-4k-2x3-h` | Firefly GPT Image 2 (4K 2:3 High Quality) |
+
 **Nano Banana Series** (legacy-compatible naming):
 
 - Pattern: `firefly-nano-banana-{resolution}-{ratio}`

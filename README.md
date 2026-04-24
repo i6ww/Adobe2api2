@@ -94,6 +94,36 @@ curl -X GET "http://127.0.0.1:6001/v1/models" \
 | `firefly-gpt-image-2-3x2` | Firefly GPT Image 2 (3:2) |
 | `firefly-gpt-image-2-2x3` | Firefly GPT Image 2 (2:3) |
 
+**GPT Image 2 4K 画质系列**：
+
+| 模型 ID | 描述 |
+|---------|------|
+| `firefly-gpt-image-2-4k` | Firefly GPT Image 2 (4K) |
+| `firefly-gpt-image-2-4k-1x1-l` | Firefly GPT Image 2 (4K 1:1 画质低) |
+| `firefly-gpt-image-2-4k-1x1-m` | Firefly GPT Image 2 (4K 1:1 画质中) |
+| `firefly-gpt-image-2-4k-1x1-h` | Firefly GPT Image 2 (4K 1:1 画质高) |
+| `firefly-gpt-image-2-4k-16x9-l` | Firefly GPT Image 2 (4K 16:9 画质低) |
+| `firefly-gpt-image-2-4k-16x9-m` | Firefly GPT Image 2 (4K 16:9 画质中) |
+| `firefly-gpt-image-2-4k-16x9-h` | Firefly GPT Image 2 (4K 16:9 画质高) |
+| `firefly-gpt-image-2-4k-9x16-l` | Firefly GPT Image 2 (4K 9:16 画质低) |
+| `firefly-gpt-image-2-4k-9x16-m` | Firefly GPT Image 2 (4K 9:16 画质中) |
+| `firefly-gpt-image-2-4k-9x16-h` | Firefly GPT Image 2 (4K 9:16 画质高) |
+| `firefly-gpt-image-2-4k-4x3-l` | Firefly GPT Image 2 (4K 4:3 画质低) |
+| `firefly-gpt-image-2-4k-4x3-m` | Firefly GPT Image 2 (4K 4:3 画质中) |
+| `firefly-gpt-image-2-4k-4x3-h` | Firefly GPT Image 2 (4K 4:3 画质高) |
+| `firefly-gpt-image-2-4k-5x4-l` | Firefly GPT Image 2 (4K 5:4 画质低) |
+| `firefly-gpt-image-2-4k-5x4-m` | Firefly GPT Image 2 (4K 5:4 画质中) |
+| `firefly-gpt-image-2-4k-5x4-h` | Firefly GPT Image 2 (4K 5:4 画质高) |
+| `firefly-gpt-image-2-4k-4x5-l` | Firefly GPT Image 2 (4K 4:5 画质低) |
+| `firefly-gpt-image-2-4k-4x5-m` | Firefly GPT Image 2 (4K 4:5 画质中) |
+| `firefly-gpt-image-2-4k-4x5-h` | Firefly GPT Image 2 (4K 4:5 画质高) |
+| `firefly-gpt-image-2-4k-3x2-l` | Firefly GPT Image 2 (4K 3:2 画质低) |
+| `firefly-gpt-image-2-4k-3x2-m` | Firefly GPT Image 2 (4K 3:2 画质中) |
+| `firefly-gpt-image-2-4k-3x2-h` | Firefly GPT Image 2 (4K 3:2 画质高) |
+| `firefly-gpt-image-2-4k-2x3-l` | Firefly GPT Image 2 (4K 2:3 画质低) |
+| `firefly-gpt-image-2-4k-2x3-m` | Firefly GPT Image 2 (4K 2:3 画质中) |
+| `firefly-gpt-image-2-4k-2x3-h` | Firefly GPT Image 2 (4K 2:3 画质高) |
+
 **Nano Banana 系列**（兼容旧命名）：
 
 - 命名：`firefly-nano-banana-{resolution}-{ratio}`

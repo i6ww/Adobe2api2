@@ -11,6 +11,8 @@ GPT_IMAGE2_RATIOS = {
     "3:2": "3x2",
     "2:3": "2x3",
     "1:1": "1x1",
+    "16:9": "16x9",
+    "9:16": "9x16",
 }
 
 # firefly-nano-banana-pro 支持的比例
@@ -199,3 +201,22 @@ MODEL_CATALOG["firefly-gpt-image-2-4k"] = {
     "aspect_ratio": "1:1",
     "description": "Firefly GPT Image 2 (4K)",
 }
+
+# GPT Image 2 models with quality levels
+quality_map = {
+    "l": {"label": "低", "description": "低画质"},
+    "m": {"label": "中", "description": "中画质"},
+    "h": {"label": "高", "description": "高画质"},
+}
+
+for ratio, suffix in GPT_IMAGE2_RATIOS.items():
+    for quality, info in quality_map.items():
+        model_id = f"firefly-gpt-image-2-4k-{suffix}-{quality}"
+        MODEL_CATALOG[model_id] = {
+            "upstream_model": "openai:firefly:colligo:gpt-image-2",
+            "upstream_model_id": "gpt-4o",
+            "upstream_model_version": "gpt-image-2",
+            "output_resolution": "4K",
+            "aspect_ratio": ratio,
+            "description": f"Firefly GPT Image 2 (4K {ratio} 画质{info['label']})",
+        }
