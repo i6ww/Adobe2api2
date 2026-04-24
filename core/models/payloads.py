@@ -58,13 +58,15 @@ def size_from_ratio(ratio: str, output_resolution: str = "2K") -> dict:
 
 
 def build_image_payload_candidates(
-    *,
     prompt: str,
     aspect_ratio: str,
     output_resolution: str,
     upstream_model_id: str,
     upstream_model_version: str,
     source_image_ids: Optional[list[str]] = None,
+    detail_level: Optional[int] = None,
+    auto_size: bool = False,
+    gpt_size: Optional[dict] = None,
 ) -> list[dict]:
     # 确保 aspect_ratio 格式正确
     if not aspect_ratio or not isinstance(aspect_ratio, str):
