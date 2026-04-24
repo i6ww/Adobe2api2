@@ -86,6 +86,13 @@ curl -X GET "http://127.0.0.1:6001/v1/models" \
 | `firefly-real` | Adobe Firefly 写实模型 |
 | `firefly-style` | Adobe Firefly 风格模型 |
 | `firefly-structure` | Adobe Firefly 结构模型 |
+| `firefly-gpt-image-2-4k` | Firefly GPT Image 2 (4K) |
+| `firefly-gpt-image-2-1x1` | Firefly GPT Image 2 (1:1) |
+| `firefly-gpt-image-2-4x3` | Firefly GPT Image 2 (4:3) |
+| `firefly-gpt-image-2-5x4` | Firefly GPT Image 2 (5:4) |
+| `firefly-gpt-image-2-4x5` | Firefly GPT Image 2 (4:5) |
+| `firefly-gpt-image-2-3x2` | Firefly GPT Image 2 (3:2) |
+| `firefly-gpt-image-2-2x3` | Firefly GPT Image 2 (2:3) |
 
 **Nano Banana 系列**（兼容旧命名）：
 

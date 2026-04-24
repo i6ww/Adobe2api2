@@ -3,6 +3,16 @@ from __future__ import annotations
 # 默认支持的所有比例
 SUPPORTED_RATIOS = {"1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "3:2", "5:4", "4:5", "2:3", "8:1", "1:4", "1:8"}
 
+# GPT Image 2 支持的比例
+GPT_IMAGE2_RATIOS = {
+    "4:3": "4x3",
+    "5:4": "5x4",
+    "4:5": "4x5",
+    "3:2": "3x2",
+    "2:3": "2x3",
+    "1:1": "1x1",
+}
+
 # firefly-nano-banana-pro 支持的比例
 NANO_BANANA_PRO_RATIOS = {
     "1:1": "1x1",
@@ -167,3 +177,25 @@ for dur in (4, 6, 8):
                 "resolution": res,
                 "description": f"Firefly Veo31 Fast video model ({dur}s {ratio} {res})",
             }
+
+# GPT Image 2 models
+for ratio, suffix in GPT_IMAGE2_RATIOS.items():
+    model_id = f"firefly-gpt-image-2-{suffix}"
+    MODEL_CATALOG[model_id] = {
+        "upstream_model": "openai:firefly:colligo:gpt-image-2",
+        "upstream_model_id": "gpt-4o",
+        "upstream_model_version": "gpt-image-2",
+        "output_resolution": "4K",
+        "aspect_ratio": ratio,
+        "description": f"Firefly GPT Image 2 ({ratio})",
+    }
+
+# GPT Image 2 4K model
+MODEL_CATALOG["firefly-gpt-image-2-4k"] = {
+    "upstream_model": "openai:firefly:colligo:gpt-image-2",
+    "upstream_model_id": "gpt-4o",
+    "upstream_model_version": "gpt-image-2",
+    "output_resolution": "4K",
+    "aspect_ratio": "1:1",
+    "description": "Firefly GPT Image 2 (4K)",
+}
