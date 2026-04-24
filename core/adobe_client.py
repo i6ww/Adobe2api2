@@ -1,12 +1,19 @@
+import hashlib
 import json
 import logging
 import os
 import time
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
 import requests
+
+try:
+    from PIL import Image
+except Exception:
+    Image = None
 
 from core.config_mgr import config_manager
 from core.models import build_image_payload_candidates
@@ -48,6 +55,7 @@ class AdobeClient:
     submit_url = "https://firefly-3p.ff.adobe.io/v2/3p-images/generate-async"
     video_submit_url = "https://firefly-3p.ff.adobe.io/v2/3p-videos/generate-async"
     upload_url = "https://firefly-3p.ff.adobe.io/v2/storage/image"
+    supported_upload_mime_types = {"image/png", "image/jpeg", "image/webp"}
 
     def __init__(self) -> None:
         self.api_key = "clio-playground-web"
@@ -58,11 +66,12 @@ class AdobeClient:
         self.retry_max_attempts = 3
         self.retry_backoff_seconds = 1.0
         self.retry_on_status_codes = [429, 451, 500, 502, 503, 504]
+        self.retry_max_attempts_per_status: dict = {}
         self.retry_on_error_types = {"timeout", "connection", "proxy"}
         self.token_rotation_strategy = "round_robin"
-        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
         self.sec_ch_ua = (
-            '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"'
+            '"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"'
         )
 
         self.apply_config(config_manager.get_all())
@@ -136,6 +145,31 @@ class AdobeClient:
             504,
         ]
 
+        # 按状态码独立 retry 次数: {429: 5, ...}. 覆盖 retry_max_attempts
+        # config_manager 默认字典不包含此 key, 直接从 config.json 文件再读一次兜底
+        per_status_raw = cfg.get("retry_max_attempts_per_status", None)
+        if per_status_raw is None:
+            try:
+                import json as _json
+                from pathlib import Path as _Path
+                _config_path = _Path(__file__).parent.parent / "config" / "config.json"
+                if _config_path.exists():
+                    _file_data = _json.loads(_config_path.read_text(encoding="utf-8"))
+                    per_status_raw = _file_data.get("retry_max_attempts_per_status", {})
+            except Exception:
+                per_status_raw = {}
+        per_status_raw = per_status_raw or {}
+        parsed_per_status: dict = {}
+        if isinstance(per_status_raw, dict):
+            for k, v in per_status_raw.items():
+                try:
+                    sk = int(k)
+                    sv = max(1, min(int(v), 20))
+                    parsed_per_status[sk] = sv
+                except Exception:
+                    continue
+        self.retry_max_attempts_per_status = parsed_per_status
+
         error_types_raw = cfg.get(
             "retry_on_error_types", ["timeout", "connection", "proxy"]
         )
@@ -171,15 +205,40 @@ class AdobeClient:
         safe_attempt = max(1, int(attempt))
         return min(30.0, base * (2 ** (safe_attempt - 1)))
 
-    def should_retry_temporary_error(self, exc: UpstreamTemporaryError) -> bool:
+    def get_max_attempts_for_status(self, status_code) -> int:
+        """按状态码返回最大重试次数, 没配置就返回全局 retry_max_attempts"""
+        if status_code is None:
+            return self.retry_max_attempts
+        try:
+            sc = int(status_code)
+        except Exception:
+            return self.retry_max_attempts
+        return int(self.retry_max_attempts_per_status.get(sc, self.retry_max_attempts))
+
+    def get_effective_max_attempts(self) -> int:
+        """所有状态码中最大 retry 次数(外层循环上限)"""
+        values = [self.retry_max_attempts]
+        if self.retry_max_attempts_per_status:
+            values.extend(self.retry_max_attempts_per_status.values())
+        return max(1, max(int(v) for v in values))
+
+    def should_retry_temporary_error(self, exc: UpstreamTemporaryError, attempt: int = 0) -> bool:
         if not self.retry_enabled:
             return False
         if isinstance(exc, UpstreamTemporaryError):
             if exc.status_code is not None:
                 try:
-                    return int(exc.status_code) in set(self.retry_on_status_codes)
+                    sc = int(exc.status_code)
                 except Exception:
                     return False
+                if sc not in set(self.retry_on_status_codes):
+                    return False
+                # attempt 是已完成的 attempt 序号 (1-based)
+                # 如果 attempt 为 0(兼容旧调用), 只做状态码判断
+                if attempt <= 0:
+                    return True
+                limit = self.get_max_attempts_for_status(sc)
+                return attempt < limit
             if exc.error_type:
                 return exc.error_type in set(self.retry_on_error_types)
         return False
@@ -224,27 +283,53 @@ class AdobeClient:
             "sec-ch-ua": self.sec_ch_ua,
             "sec-ch-ua-mobile": "?0",
             "sec-ch-ua-platform": '"Windows"',
-            "sec-fetch-site": "same-site",
+            "sec-fetch-site": "cross-site",
             "sec-fetch-mode": "cors",
             "sec-fetch-dest": "empty",
         }
 
-    def _submit_headers(self, token: str) -> dict:
+    @staticmethod
+    def _extract_user_id_from_token(token: str) -> str:
+        try:
+            parts = token.split(".")
+            if len(parts) < 2:
+                return ""
+            payload_b64 = parts[1]
+            padding = 4 - len(payload_b64) % 4
+            if padding != 4:
+                payload_b64 += "=" * padding
+            import base64, json as _json
+            jwt = _json.loads(base64.urlsafe_b64decode(payload_b64))
+            return str(jwt.get("user_id") or "")
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _compute_nonce(user_id: str, prompt: str) -> str:
+        return hashlib.sha256(
+            f"{user_id}-{prompt[:256]}".encode("utf-8")
+        ).hexdigest()
+
+    def _submit_headers(self, token: str, prompt: str = "") -> dict:
         headers = self._browser_headers()
+        user_id = self._extract_user_id_from_token(token)
         headers.update(
             {
                 "Authorization": f"Bearer {token}",
                 "x-api-key": self.api_key,
+                "x-nonce": self._compute_nonce(user_id, prompt),
                 "content-type": "application/json",
                 "accept": "*/*",
             }
         )
         return headers
 
-    def _submit_headers_minimal(self, token: str) -> dict:
+    def _submit_headers_minimal(self, token: str, prompt: str = "") -> dict:
+        user_id = self._extract_user_id_from_token(token)
         return {
             "Authorization": f"Bearer {token}",
             "x-api-key": self.api_key,
+            "x-nonce": self._compute_nonce(user_id, prompt),
             "content-type": "application/json",
             "accept": "*/*",
         }
@@ -252,10 +337,17 @@ class AdobeClient:
     def _poll_headers(self, token: str) -> dict:
         return {
             "Authorization": f"Bearer {token}",
+            "x-api-key": self.api_key,
             "accept": "*/*",
             "referer": "https://firefly.adobe.com/",
             "origin": "https://firefly.adobe.com",
             "user-agent": self.user_agent,
+            "sec-ch-ua": self.sec_ch_ua,
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "sec-fetch-site": "cross-site",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-dest": "empty",
         }
 
     def _post_json(self, url: str, headers: dict, payload: dict):
@@ -441,6 +533,7 @@ class AdobeClient:
     ) -> str:
         if not image_bytes:
             raise AdobeRequestError("image is empty")
+        image_bytes, mime_type = self._prepare_upload_image(image_bytes, mime_type)
 
         headers = {
             "authorization": f"Bearer {token}",
@@ -473,14 +566,37 @@ class AdobeClient:
             raise AdobeRequestError("upload image succeeded but no image id returned")
         return str(image_id)
 
+    def _prepare_upload_image(
+        self, image_bytes: bytes, mime_type: str
+    ) -> tuple[bytes, str]:
+        normalized_mime = str(mime_type or "").strip().lower() or "image/jpeg"
+        if normalized_mime in self.supported_upload_mime_types:
+            return image_bytes, normalized_mime
+        if Image is None:
+            return image_bytes, normalized_mime
+        try:
+            with Image.open(BytesIO(image_bytes)) as image:
+                converted = image.convert("RGBA" if image.mode in {"RGBA", "LA", "P"} else "RGB")
+                out = BytesIO()
+                converted.save(out, format="PNG")
+                return out.getvalue(), "image/png"
+        except Exception:
+            return image_bytes, normalized_mime
+
+    upsample_upload_url = "https://image-v4.ff.adobe.io/v2/storage/image"
+    upsample_submit_url = "https://image-v4.ff.adobe.io/v1/images/upsample-async"
+
     def _build_payload_candidates(
         self,
         prompt: str,
-        aspect_ratio: str,
-        output_resolution: str,
+        aspect_ratio: str | None,
+        output_resolution: str | None,
         upstream_model_id: str,
         upstream_model_version: str,
         source_image_ids: Optional[list[str]] = None,
+        detail_level: Optional[int] = None,
+        auto_size: bool = False,
+        gpt_size: Optional[dict] = None,
     ) -> list[dict]:
         return build_image_payload_candidates(
             prompt=prompt,
@@ -489,7 +605,94 @@ class AdobeClient:
             upstream_model_id=upstream_model_id,
             upstream_model_version=upstream_model_version,
             source_image_ids=source_image_ids,
+            detail_level=detail_level,
+            auto_size=auto_size,
+            gpt_size=gpt_size,
         )
+
+    def upload_image_for_upsample(
+        self, token: str, image_bytes: bytes
+    ) -> str:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "x-api-key": self.api_key,
+            "content-type": "image/png",
+            "accept": "application/json",
+            "origin": "https://firefly.adobe.com",
+            "referer": "https://firefly.adobe.com/",
+        }
+        resp = self._post_bytes(
+            self.upsample_upload_url, headers=headers, payload=image_bytes
+        )
+        if resp.status_code in (401, 403):
+            raise AuthError("Token invalid or expired")
+        if resp.status_code != 200:
+            raise AdobeRequestError(
+                f"upsample upload failed: {resp.status_code} {resp.text[:300]}"
+            )
+        try:
+            data = resp.json()
+        except Exception:
+            raise AdobeRequestError("upsample upload: invalid response")
+        image_id = (((data.get("images") or [{}])[0]) or {}).get("id")
+        if not image_id:
+            raise AdobeRequestError("upsample upload: no image id returned")
+        return str(image_id)
+
+    def upsample(
+        self,
+        token: str,
+        image_id: str,
+        factor: int = 4,
+        timeout: int = 120,
+        progress_cb: Optional[Callable[[dict], None]] = None,
+    ) -> bytes:
+        payload = {
+            "modelVersion": "creative_upsampler_v1",
+            "creativityLevel": "low",
+            "image": {"id": image_id},
+            "output": {"storeInputs": False},
+            "seeds": [int(time.time()) % 999999],
+            "upsamplerFactor": factor,
+        }
+        headers = self._submit_headers(token)
+        resp = self._post_json(self.upsample_submit_url, headers=headers, payload=payload)
+
+        if resp.status_code in (401, 403):
+            raise AuthError("Token invalid or expired")
+        if resp.status_code != 200:
+            raise AdobeRequestError(
+                f"upsample submit failed: {resp.status_code} {resp.text[:300]}"
+            )
+
+        poll_url = ((resp.json().get("links") or {}).get("result") or {}).get("href")
+        if not poll_url:
+            raise AdobeRequestError("upsample submit: no poll url returned")
+
+        start = time.time()
+        while True:
+            poll_resp = self._get(poll_url, headers=self._poll_headers(token), timeout=60)
+            if poll_resp.status_code != 200:
+                raise AdobeRequestError(
+                    f"upsample poll failed: {poll_resp.status_code} {poll_resp.text[:300]}"
+                )
+            latest = poll_resp.json()
+            status_val = str(latest.get("status") or "").upper()
+
+            outputs = latest.get("outputs") or []
+            if outputs:
+                img_url = ((outputs[0] or {}).get("image") or {}).get("presignedUrl")
+                if not img_url:
+                    raise AdobeRequestError("upsample finished without image url")
+                img_resp = self._get(img_url, headers={"accept": "*/*"}, timeout=60)
+                img_resp.raise_for_status()
+                return img_resp.content
+
+            if status_val in {"FAILED", "CANCELLED", "ERROR"}:
+                raise AdobeRequestError(f"upsample job failed: {latest}")
+            if time.time() - start > timeout:
+                raise AdobeRequestError("upsample timed out")
+            time.sleep(2.0)
 
     @staticmethod
     def _video_size(aspect_ratio: str, resolution: str = "720p") -> dict:
@@ -606,7 +809,7 @@ class AdobeClient:
             job_id = path_parts[-1]
             if not job_id:
                 return raw_url
-            return f"https://{host}/v2/jobs/result/{job_id}?host={host}/"
+            return f"https://bks-epo8522.adobe.io/v2/jobs/result/{job_id}?host={host}/"
         except Exception:
             return raw_url
 
@@ -771,7 +974,7 @@ class AdobeClient:
             reference_mode=reference_mode,
         )
         submit_resp = self._post_json(
-            self.video_submit_url, headers=self._submit_headers(token), payload=payload
+            self.video_submit_url, headers=self._submit_headers(token, prompt=payload.get("prompt", "")), payload=payload
         )
 
         if submit_resp.status_code in (401, 403):
@@ -927,14 +1130,17 @@ class AdobeClient:
         self,
         token: str,
         prompt: str,
-        aspect_ratio: str = "16:9",
-        output_resolution: str = "2K",
+        aspect_ratio: str | None = "16:9",
+        output_resolution: str | None = "2K",
         upstream_model_id: str = "gemini-flash",
         upstream_model_version: str = "nano-banana-2",
         source_image_ids: Optional[list[str]] = None,
         timeout: int = 180,
         out_path: Optional[Path] = None,
         progress_cb: Optional[Callable[[dict], None]] = None,
+        detail_level: Optional[int] = None,
+        auto_size: bool = False,
+        gpt_size: Optional[dict] = None,
     ) -> tuple[Optional[bytes], dict]:
         submit_resp = None
         last_error = ""
@@ -945,9 +1151,12 @@ class AdobeClient:
             upstream_model_id=upstream_model_id,
             upstream_model_version=upstream_model_version,
             source_image_ids=source_image_ids,
+            detail_level=detail_level,
+            auto_size=auto_size,
+            gpt_size=gpt_size,
         ):
             submit_resp = self._post_json(
-                self.submit_url, headers=self._submit_headers(token), payload=payload
+                self.submit_url, headers=self._submit_headers(token, prompt=payload.get("prompt", "")), payload=payload
             )
             if submit_resp.status_code == 200:
                 break
@@ -1027,11 +1236,12 @@ class AdobeClient:
                     poll_resp.status_code,
                     poll_resp.text[:500],
                 )
-                if poll_resp.status_code in (429, 451) or poll_resp.status_code >= 500:
+                if poll_resp.status_code in (408, 429, 451) or poll_resp.status_code >= 500:
+                    _poll_etype = "timeout" if poll_resp.status_code == 408 else "status"
                     raise UpstreamTemporaryError(
                         f"poll failed: {poll_resp.status_code} {poll_resp.text[:300]}",
                         status_code=poll_resp.status_code,
-                        error_type="status",
+                        error_type=_poll_etype,
                     )
                 raise AdobeRequestError(
                     f"poll failed: {poll_resp.status_code} {poll_resp.text[:300]}"
